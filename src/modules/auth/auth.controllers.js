@@ -1,5 +1,5 @@
-const { loginSchema } = require('./auth.schema');
-const { authenticateAdmin } = require('./auth.service');
+const { loginSchema, changeInitialPasswordSchema } = require('./auth.schema');
+const { authenticateAdmin, changeInitialPassword } = require('./auth.service');
 
 async function login(req, res) {
     const validate = loginSchema.safeParse(req.body);
@@ -37,4 +37,36 @@ async function login(req, res) {
     }
 }
 
-module.exports = {login};
+async function changePassword(req, res){
+    const validation = changeInitialPasswordSchema.safeParse(req.body);
+
+    if(!validation.success){
+        return res.status(400).json({
+            message: "Nova senha inválida.",
+            errors: validation.error.issues.map((issue) => ({
+                field: issue.path.join("."),
+                message: issue.message,
+            }))
+        });
+    }
+
+    try{
+        const result = await changeInitialPassword({
+            userId: req.preAuth.userId,
+            newPassword: validation.data.newPassoword,
+        });
+
+        return res.status(200).json({
+            message: "Senha alterada com sucesso.",
+            data: result,
+        });
+    }
+    catch(error){
+        console.log("Erro ao alterar senha incial:", error);
+
+        return res.status(error.statusCode || 500).json({
+            message: error.statusCode ? error.message : "Não foi possível alterar a senha.",
+        });
+    };
+}
+module.exports = {login, changePassword};
