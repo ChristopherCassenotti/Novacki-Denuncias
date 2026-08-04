@@ -1,5 +1,9 @@
 const { loginSchema, changeInitialPasswordSchema } = require('./auth.schema');
 const { authenticateAdmin, changeInitialPassword } = require('./auth.service');
+const { setSessionCookie } = require('./auth.cookies');
+const { revokeSession } = require('./session.service');
+const { getSessionCookieName, clearSessionCookie } = require('./auth.cookies');
+
 
 async function login(req, res) {
     const validate = loginSchema.safeParse(req.body);
@@ -13,7 +17,8 @@ async function login(req, res) {
             })),
         });
     };
-
+    
+    
     try{
         const result = await authenticateAdmin(validate.data);
 
@@ -23,9 +28,25 @@ async function login(req, res) {
             });
         }
 
+        if (result.session) {
+          setSessionCookie(
+            res,
+            result.session.token,
+            result.session.expiresAt
+          );
+        }
+
         return res.status(200).json({
-            message: "Crendenciais validadas com sucesso.",
-            data: result,
+          message:
+            result.nextStep === "CHANGE_PASSWORD"
+              ? "A senha inicial precisa ser alterada."
+              : "Login realizado com sucesso.",
+                
+          data: {
+            user: result.user,
+            nextStep: result.nextStep,
+            preAuthToken: result.preAuthToken,
+          },
         });
     }
     catch(error){
@@ -80,4 +101,34 @@ async function changePassword(req, res) {
   }
 }
 
-module.exports = {login, changePassword};
+async function me(req, res) {
+    return res.status(200).json({
+        data:{
+            user: req.auth.user,
+        },
+    });
+}
+
+async function logout(req, res) {
+    try{
+        const cookieName = getSessionCookieName();
+        const token = req.cookies?.[cookieName];
+
+        await revokeSession(token);
+
+        clearSessionCookie(res);
+
+        return res.status(200).json({
+            message: "Logout realizado com sucesso.",
+        });
+    }
+    catch(error){
+        console.error("Erro no logout:", error);
+
+        return res.status(500).json({
+            message: "Não foi possível realizar o logout.",
+        });
+    };
+}
+
+module.exports = {login, changePassword, me, logout};

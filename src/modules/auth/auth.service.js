@@ -1,4 +1,5 @@
 const { randomUUID } = require("node:crypto");
+const {createAdminSession} = require('./session.service');
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -34,43 +35,47 @@ async function authenticateAdmin({email, password}) {
         return null;
     }
 
-    const activeMfaMethod = await prisma.user_mfa_methods.findFirst({
+    if(user.must_change_password) {
+        const preAuthToken = generatePreAuthToken(
+            user.id,
+            "CHANGE_PASSWORD"
+        );
+        
+        return{
+            user:{
+                id: user.id,
+                name: user.name,
+                email: user.email,
+            },
+            nextStep: "CHANGE_PASSWORD",
+            preAuthToken,
+            session: null,
+        };
+    }
+
+    const session = await createAdminSession(user.id);
+
+    await prisma.users.update({
         where:{
-            user_id: user.id,
-            is_active: true,
+            id: user.id,
         },
-        select:{
-            id:true,
+        data:{
+            last_login_at: new Date(),
         },
     });
 
-    let nextStep;
-
-    if(user.must_change_password) {
-        nextStep = "CHANGE_PASSWORD";
-    }
-    else if(!activeMfaMethod){
-        nextStep = "MFA_SETUP";
-    }
-    else{
-        nextStep = "MFA_CHALLENGE";
-    }
-
-    const preAuthToken = generatePreAuthToken(
-        user.id,
-        nextStep
-    );
-
-    return {
+    return{
         user:{
             id: user.id,
             name: user.name,
             email: user.email,
         },
-        nextStep,
-        preAuthToken,
+        nextStep: "AUTHENTICATED",
+        preAuthToken: null,
+        session,
     };
-};
+}
+
 
 async function changeInitialPassword({userId, newPassword}) {
     const user = await prisma.users.findUnique({
