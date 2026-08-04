@@ -1,5 +1,5 @@
 const app = require('./app');
-require('dotenv').config;
+require('dotenv').config();
 
 const prisma = require('./database/prisma');
 

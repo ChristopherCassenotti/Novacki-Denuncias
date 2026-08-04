@@ -6,7 +6,7 @@ const loginSchema = z.object({
     .trim()
     .toLowerCase()
     .email("Informe um e-mail válido.")
-    .max(191, "O e-mail é muito longo."),
+    .max(191),
 
   password: z
     .string()
@@ -16,26 +16,33 @@ const loginSchema = z.object({
 
 const changeInitialPasswordSchema = z
   .object({
-    newPassoword: z
-     .string()
-     .min(12, "A nova senha deve ter no mínimo 12 caracteres.")
-     .max(72, "A nova senha é muito longa.")
-     .regex(/[a-z]/, "Inclua pelo menos uma letra minúscula.")
-     .regex(/[A-Z]/, "Inclua pelo menos uma letra maiúscula.")
-     .regex(/[0-9]/, "Inclua pelo menos um número.")
-     .regex(
-       /[^a-zA-Z0-9]/,
-       "Inclua pelo menos um caractere especial."
+    newPassword: z
+      .string()
+      .min(
+        12,
+        "A nova senha precisa ter pelo menos 12 caracteres."
+      )
+      .max(72, "A nova senha é muito longa.")
+      .regex(/[a-z]/, "Inclua uma letra minúscula.")
+      .regex(/[A-Z]/, "Inclua uma letra maiúscula.")
+      .regex(/[0-9]/, "Inclua um número.")
+      .regex(
+        /[^a-zA-Z0-9]/,
+        "Inclua um caractere especial."
       ),
 
-      confirmPassord: z.string(),
+    confirmPassword: z.string(),
   })
-  .refine((data) => data.newPassoword === data.confirmPassord,
-  {
-    message: "As senha não coincidem.",
-    path: ["confirmPassoword"],
-  });
+  .refine(
+    ({ newPassword, confirmPassword }) =>
+      newPassword === confirmPassword,
+    {
+      message: "As senhas não coincidem.",
+      path: ["confirmPassword"],
+    }
+  );
 
 module.exports = {
-  loginSchema, changeInitialPasswordSchema,
+  loginSchema,
+  changeInitialPasswordSchema,
 };

@@ -1,8 +1,9 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { randoUUID } = require('node:crypto');
+const { randomUUID } = require("node:crypto");
 
-const prisma = require('../../database/prisma');
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const prisma = require("../../database/prisma");
+
 const { type } = require('node:os');
 const { id } = require('zod/locales');
 
@@ -46,7 +47,7 @@ async function authenticateAdmin({email, password}) {
     let nextStep;
 
     if(user.must_change_password) {
-        nextStep = "CHAGE_PASSWORD";
+        nextStep = "CHANGE_PASSWORD";
     }
     else if(!activeMfaMethod){
         nextStep = "MFA_SETUP";
@@ -131,18 +132,18 @@ async function changeInitialPassword({userId, newPassword}) {
         });
 
         await tx.audit_logs.create({
-            data:{
-                actor_type: "ADMIN",
-                actor_user_id: user.id,
-                action: "INITIAL_PASSWORD_CHANGED",
-                entity_type: "USER",
-                entity_id: user.id,
-                success:true,
-                request_id: randoUUID(),
-                metadata_json:{
-                    source: "ADMIN_PRE_AUTH",
-                },
-            },
+          data: {
+            actor_type: "ADMIN",
+            actor_user_id: user.id,
+            action: "INITIAL_PASSWORD_CHANGED",
+            entity_type: "USER",
+            entity_id: user.id,
+            success: true,
+            request_id: randomUUID(),
+            metadata_json: JSON.stringify({
+                source: "ADMIN_PRE_AUTH",
+            }),
+          },
         });
     });
 

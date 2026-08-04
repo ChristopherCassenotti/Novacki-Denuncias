@@ -37,36 +37,47 @@ async function login(req, res) {
     }
 }
 
-async function changePassword(req, res){
-    const validation = changeInitialPasswordSchema.safeParse(req.body);
+async function changePassword(req, res) {
+  const input = {
+    newPassword: req.body?.newPassword,
+    confirmPassword: req.body?.confirmPassword,
+  };
 
-    if(!validation.success){
-        return res.status(400).json({
-            message: "Nova senha inválida.",
-            errors: validation.error.issues.map((issue) => ({
-                field: issue.path.join("."),
-                message: issue.message,
-            }))
-        });
-    }
+  console.log("Dados enviados ao Zod:", input);
 
-    try{
-        const result = await changeInitialPassword({
-            userId: req.preAuth.userId,
-            newPassword: validation.data.newPassoword,
-        });
+  const validation =
+    changeInitialPasswordSchema.safeParse(input);
 
-        return res.status(200).json({
-            message: "Senha alterada com sucesso.",
-            data: result,
-        });
-    }
-    catch(error){
-        console.log("Erro ao alterar senha incial:", error);
+  if (!validation.success) {
+    return res.status(400).json({
+      message: "Nova senha inválida.",
+      errors: validation.error.issues.map((issue) => ({
+        field: issue.path.join("."),
+        message: issue.message,
+      })),
+    });
+  }
 
-        return res.status(error.statusCode || 500).json({
-            message: error.statusCode ? error.message : "Não foi possível alterar a senha.",
-        });
-    };
+  try {
+    const result = await changeInitialPassword({
+      userId: req.preAuth.userId,
+      newPassword: validation.data.newPassword,
+    });
+
+    return res.status(200).json({
+      message: "Senha alterada com sucesso.",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Erro ao alterar senha inicial:", error);
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.statusCode
+          ? error.message
+          : "Não foi possível alterar a senha.",
+    });
+  }
 }
+
 module.exports = {login, changePassword};
