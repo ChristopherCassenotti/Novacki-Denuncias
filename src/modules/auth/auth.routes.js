@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {login, changePassword, me, logout} = require('./auth.controllers');
+const {login, changePassword, me, logout} = require('./auth.controller');
 const { requirePreAuth } = require('./preAuth.middleware');
 const { requireAdminAuth } = require('./auth.middleware');
 
