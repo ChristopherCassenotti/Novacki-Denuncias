@@ -1,6 +1,8 @@
 const { randomUUID } = require('node:crypto');
 
 const prisma = require('../../database/prisma');
+const { create } = require('node:domain');
+const { success } = require('zod');
 
 function createServiceError(message, statusCode){
     const error = new Error(message);
@@ -219,4 +221,113 @@ async function listRoles() {
             permissions:
                 permissionsByRole.get(role.id) || [],
         }));
+}
+
+async function createRole({code, name, description, permissionIds, actorUserId}) {
+        const existingRole = await prisma.roles.findUnique({
+            where:{
+                code,
+            },
+            select:{
+                id:true,
+            },
+        });
+
+        if(existingRole){
+            throw createServiceError('Já existe um perfil com esse', 409);
+        }
+        
+        const roleId = randomUUID();
+
+        await prisma.$transaction(async (tx)=>{
+            const validatePermissionIds = await validatePermissionIds(tx, permissionIds);
+        });
+
+        await tx.roles.create({
+            data:{
+                id: roleId,
+                code,
+                name,
+                description: normalizeDescription(description) ?? null,
+                is_system: false,
+                is_active: true,
+            },
+        });
+
+        if(validatePermissionIds.length > 0){
+            await tx.role_permissions.createMany({
+                data: validatePermissionIds.map((permissionId) => ({
+                    role_id: roleId,
+                    permission_id: permissionId,
+                })
+            ),
+            skipDuplicates: true,
+            });
+        }
+
+        await tx.audit_logs.create({
+            data:{
+                actor_type: 'ADMIN',
+                actor_user_id: actorUserId,
+                action: 'ROLE_CREATED',
+                entity_id: roleId,
+                success: true,
+                request_id: randomUUID(),
+                metadata_json:{
+                    code,
+                    name,
+                    permissionIds: validatePermissionIds,
+                },
+            },
+        });
+
+        return getRoleById(roleId);
+}
+
+async function updateRole(roleId, {name, description}, actorUserId) {
+    
+    const currentRole = await findeRoleOrFail(prisma,roleId);
+
+    ensureRoleCanBeModified(currentRole);
+
+    const updateData = {};
+
+    if(name !== undefined){
+        updateData.description = normalizeDescription(description);
+    }
+
+    await prisma.$transaction(async (tx) => {
+        await tx.roles.update({
+            where:{
+                id: roleId,
+            },
+            data: updateData,
+    });
+
+    await tx.audit_logs.create({
+        data:{
+            actor_type: "ADMIN",
+            actor_user_id: actorUserId,
+            action: "ROLE_UPDATED",
+            entity_type: "ROLE",
+            entity_id: roleId,
+            success: true,
+            request_id: randomUUID(),
+            metadata_json:{
+                changedFields: Object.keys(updateData),
+                previous:{
+                    name: currentRole.name,
+                    description: currentRole.description,
+                },
+                current: updateData,
+            },
+        },
+    });
+    });
+
+    return getRoleById(roleId);
+}
+
+async function replaceRolePermissions(params) {
+    
 }
