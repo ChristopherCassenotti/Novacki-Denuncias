@@ -1,0 +1,9 @@
+const express = require('express');
+const router = express.Router();
+const { requireAdminAuth } = require('../auth/auth.middleware');
+const { requirePermissions } = require('../access/access.middleware');
+const {getPermissions} = require('./permissions.controller');
+
+router.get('/', requireAdminAuth, requirePermissions('ROLE_MANAGE'), getPermissions);
+
+module.exports = router;

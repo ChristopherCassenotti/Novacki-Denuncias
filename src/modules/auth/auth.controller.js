@@ -64,8 +64,6 @@ async function changePassword(req, res) {
     confirmPassword: req.body?.confirmPassword,
   };
 
-  console.log("Dados enviados ao Zod:", input);
-
   const validation =
     changeInitialPasswordSchema.safeParse(input);
 

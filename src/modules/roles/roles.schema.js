@@ -5,16 +5,26 @@ const roleIdParamSchema = z.object({
 });
 
 const roleCodeSchema = z
-    .string()
-    .trim()
-    .min(3, 'O código precisa ter pelo menos 3 caracteres.')
-    .max(80, 'O código pode ter no máximo 80 caracteres.')
-    .transform((value) => value.toLowerCase().replace(/\s+/g, '_'))
-    .refine((value) => /^[A-Z][A-Z0-9_]*$/.test(value),
-    {
-        message: 'Use somente letras maiúsculas, números e underscore. O código deve começar com uma letra.'
-    }
-);
+  .string()
+  .trim()
+  .min(3, "O código precisa ter pelo menos 3 caracteres.")
+  .max(80, "O código pode ter no máximo 80 caracteres.")
+  .transform((value) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+  )
+  .pipe(
+    z
+      .string()
+      .regex(
+        /^[A-Z][A-Z0-9_]*$/,
+        "Use somente letras maiúsculas, números e underscore. O código deve começar com uma letra."
+      )
+  );
 
 const permissionIdsSchema = z
     .array(
