@@ -490,11 +490,4 @@ async function changeRoleStatus(
   return getRoleById(roleId);
 }
 
-module.exports = {
-  getRoleById,
-  listRoles,
-  createRole,
-  updateRole,
-  replaceRolePermissions,
-  changeRoleStatus,
-};
+module.exports = { getRoleById, listRoles, createRole, updateRole, replaceRolePermissions, changeRoleStatus, };
