@@ -91,7 +91,7 @@ async function attachRolesToUsers(users) {
 
     const userIds = users.map((user) => user.id);
 
-    const assignment = await prisma.user_roles.findMany({
+    const assignments = await prisma.user_roles.findMany({
         where:{
             user_id:{
                 in: userIds,
@@ -104,7 +104,7 @@ async function attachRolesToUsers(users) {
         },
     });
 
-    if(assignment.length === 0){
+    if(assignments.length === 0){
         return users.map((user) => ({
             ...user,
             roles:[],
@@ -113,7 +113,7 @@ async function attachRolesToUsers(users) {
 
     const roleIds = [
         ...new Set(
-            assignment.map((assignment) => assignment.role_id),
+            assignments.map((assignment) => assignment.role_id),
         )
     ];
 
@@ -140,7 +140,7 @@ async function attachRolesToUsers(users) {
 
     const rolesByUser = new Map();
 
-    for(const assignment of assignment){
+    for(const assignment of assignments){
         const role = roleMap.get(assignment.role_id);
     
         if(!role){
@@ -194,7 +194,7 @@ async function listUsers({page, limit, search, isActive, roleId}) {
     }
 
     if(roleId){
-        const assignment = await prisma.user_roles.findMany({
+        const assignments = await prisma.user_roles.findMany({
             where:{
                 role_id: roleId,
             },
@@ -204,7 +204,7 @@ async function listUsers({page, limit, search, isActive, roleId}) {
         });
 
 
-        const userIds = assignment.map((assignment) => assignment.user_id);
+        const userIds = assignments.map((assignment) => assignment.user_id);
 
         if(userIds.length === 0){
             return{

@@ -100,3 +100,176 @@ async function createUserHandler(req, res) {
         return sendControllerError(res, error, 'Não foi possível criar o usuário.');
     }
 }
+
+async function updateUserHandler(req, res) {
+  const paramsValidation =
+    userIdParamSchema.safeParse(
+      req.params
+    );
+
+  if (!paramsValidation.success) {
+    return res.status(400).json({
+      message:
+        "ID de usuário inválido.",
+
+      errors:
+        formatValidationErrors(
+          paramsValidation.error
+        ),
+    });
+  }
+
+  const bodyValidation =
+    updateUserSchema.safeParse(
+      req.body
+    );
+
+  if (!bodyValidation.success) {
+    return res.status(400).json({
+      message:
+        "Dados de atualização inválidos.",
+
+      errors:
+        formatValidationErrors(
+          bodyValidation.error
+        ),
+    });
+  }
+
+  try {
+    const user =
+      await updateUserService(
+        paramsValidation.data.id,
+        bodyValidation.data,
+        req.auth.userId
+      );
+
+    return res.status(200).json({
+      message:
+        "Usuário atualizado com sucesso.",
+
+      data: {
+        user,
+      },
+    });
+  } catch (error) {
+    return sendControllerError(
+      res,
+      error,
+      "Não foi possível atualizar o usuário."
+    );
+  }
+}
+
+async function replaceRolesHandler(req, res) {
+    const paramsValidation = userIdParamSchema.safeParse(req.params);
+
+    if(!paramsValidation.success){
+        return res.status(400).json({
+            message:'ID de usuário inválido.',
+        });
+    }
+
+    const bodyValidation = replaceUserRolesSchema.safeParse(req.body);
+
+    if(!bodyValidation.success){
+        return res.status(400).json({
+            message: 'Lista de perfis inválida',
+        
+            errors: formatValidationErrors(bodyValidation.error)
+        });
+    }
+
+    try{
+        const user = await replaceUserRoles(paramsValidation.data.id, bodyValidation.data.roleIds, req.auth.userId);
+
+        return res.status(200).json({
+            message: 'Perfis do usuário atualizados com sucesso.',
+
+            data:{
+                user,
+            }
+        });
+    }
+    catch(error){
+        return sendControllerError(res, error, 'Não foi possível atualizar os perfis do usuário.');
+    }
+}
+
+async function changeStatusHandler(req, res) {
+    const paramsValidation = userIdParamSchema.safeParse(req.params);
+
+    if(!paramsValidation.success){
+        return res.status(400).json({
+            message: 'ID de usuário inválido',
+
+            errors: formatValidationErrors(paramsValidation.error)
+        });
+    }
+
+    const bodyValidation = changeUserStatusSchema.safeParse(req.body);
+
+    if(!bodyValidation.success){
+        return res.status(400).json({
+            message: 'Status de usuário inválido.',
+
+            errors: formatValidationErrors(bodyValidation.error)
+        });
+    }
+
+    try{
+        const user = await changeUserStatus(paramsValidation.data.id, bodyValidation.data.isActive, req.auth.userId);
+
+        return res.status(200).json({
+            message: bodyValidation.data.isActive
+                ? 'Usuário ativado com sucesso'
+                : 'Usuário desativado com sucesso',
+
+            data:{
+                user
+            }
+        });
+    }
+    catch(error){
+        return sendControllerError(res, error, 'Não foi possível alterar o status do usuário.'); 
+    }
+}
+
+async function resetPasswordHandler(req, res) {
+    const paramsValidation = userIdParamSchema(req.params);
+
+    if(!paramsValidation.success){
+        return res.status(400).json({
+            message: 'ID de usuário inválido.',
+            
+            errors: formatValidationErrors(paramsValidation.error),
+        });
+    }
+
+    const bodyValidation = resetUserPasswordSchema(req.body);
+
+    if(!bodyValidation.success){
+        return res.status(400).json({
+            message: 'Dados de redefinição de senha inválidos.',
+
+            errors: formatValidationErrors(bodyValidation.error),
+        });
+    }
+
+    try{
+        const result = await resetUserPassword(paramsValidation.data.id, bodyValidation.data.temporaryPassword, req.auth.userId);
+
+        return res.status(200).json({
+            message: 'Senha redefinida com sucesso.',
+
+            data: result,
+
+            warning: 'A senha temporária é exibida somente nesta resposta.'
+        });
+    }
+    catch(error){
+        return sendControllerError(res, error, 'Não foi possível redefinir a senha');
+    }
+}
+
+module.exports = { getUser, getUsers, createUserHandler, updateUserHandler, replaceRolesHandler, changeStatusHandler, resetPasswordHandler };
