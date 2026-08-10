@@ -342,7 +342,10 @@ async function updateRole(
       where: {
         id: roleId,
       },
-      data: updateData,
+      data: {
+        ...updateData,
+        updated_at: new Date(),
+      },
     });
 
     await tx.audit_logs.create({
@@ -421,6 +424,15 @@ async function replaceRolePermissions(
       });
     }
 
+    await tx.roles.update({
+      where: {
+        id: roleId,
+      },
+      data: {
+        updated_at: new Date(),
+      },
+    });
+
     await tx.audit_logs.create({
       data: {
         actor_type: "ADMIN",
@@ -465,6 +477,7 @@ async function changeRoleStatus(
       },
       data: {
         is_active: isActive,
+        updated_at: new Date(),
       },
     });
 
