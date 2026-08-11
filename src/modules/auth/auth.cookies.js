@@ -6,8 +6,9 @@ function getBaseCookieOptions() {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
     path: "/",
+    priority: "high",
   };
 }
 

@@ -1,16 +1,56 @@
-const { randomUUID } = require("node:crypto");
+const { createHmac, randomUUID } = require("node:crypto");
 const {createAdminSession} = require('./session.service');
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../../database/prisma");
 
-const { type } = require('node:os');
-const { id } = require('zod/locales');
-
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("invalid-password-placeholder", 12);
 
-async function authenticateAdmin({email, password}) {
+function hashAuditValue(value) {
+    if (!value) {
+        return null;
+    }
+
+    return createHmac(
+        "sha256",
+        process.env.ADMIN_PRE_AUTH_SECRET
+    )
+        .update(String(value))
+        .digest();
+}
+
+async function recordLoginAttempt({
+    userId,
+    email,
+    ip,
+    userAgent,
+    success,
+    failureReason,
+}) {
+    try {
+        await prisma.login_attempts.create({
+            data: {
+                user_id: userId || null,
+                login_identifier_hash: hashAuditValue(email),
+                ip_hash: hashAuditValue(ip),
+                user_agent:
+                    typeof userAgent === "string"
+                        ? userAgent.slice(0, 500)
+                        : null,
+                success,
+                failure_reason: failureReason || null,
+            },
+        });
+    } catch (error) {
+        console.error(
+            "Não foi possível registrar a tentativa de login:",
+            error.message
+        );
+    }
+}
+
+async function authenticateAdmin({email, password}, context = {}) {
     
     const user = await prisma.users.findUnique({
         where:{
@@ -32,8 +72,24 @@ async function authenticateAdmin({email, password}) {
     const passwordMatches = await bcrypt.compare(password, passwordHash);
 
     if(!user || !passwordMatches || !user.is_active){
+        await recordLoginAttempt({
+            userId: user?.id,
+            email,
+            ip: context.ip,
+            userAgent: context.userAgent,
+            success: false,
+            failureReason: "INVALID_CREDENTIALS_OR_INACTIVE_USER",
+        });
         return null;
     }
+
+    await recordLoginAttempt({
+        userId: user.id,
+        email,
+        ip: context.ip,
+        userAgent: context.userAgent,
+        success: true,
+    });
 
     if(user.must_change_password) {
         const preAuthToken = generatePreAuthToken(

@@ -1,5 +1,4 @@
-const { tr } = require('zod/locales');
-const { teamIdParamSchema, createTeamSchema, updateTeamSchema, replaceMembersSchema, changeTeamStatusScham } = require('./teams.schema');
+const { teamIdParamSchema, createTeamSchema, updateTeamSchema, replaceMembersSchema, changeTeamStatusSchema } = require('./teams.schema');
 const { getTeamById, listTeams, createTeam, updateTeam, replaceTeamMembers, changeTeamStatus } = require('./teams.service');
 
 function formatValidationErrors(error){
@@ -153,7 +152,7 @@ async function replaceMembersHandler(req, res) {
     }
 
     try{
-        const team = await replaceMembersHandler (paramsValidation.data.id, bodyValidation.data.members, req.auth.userId);
+        const team = await replaceTeamMembers(paramsValidation.data.id, bodyValidation.data.members, req.auth.userId);
 
         return res.status(200).json({
             message: 'Membros atualizados com sucesso.',
@@ -177,7 +176,7 @@ async function changeStatusHandler(req, res) {
         })
     }
 
-    const bodyValidation = teamIdParamSchema.safeParse(req.body);
+    const bodyValidation = changeTeamStatusSchema.safeParse(req.body);
 
     if(!bodyValidation.success){
         return res.status(400).json({
@@ -203,3 +202,5 @@ async function changeStatusHandler(req, res) {
         return sendControllerError(res, error, 'Não foi possível alterar os status da equipe.');
     }
 }
+
+module.exports = {getTeams, getTeam, createTeamHandler, updateTeamHandler, replaceMembersHandler, changeStatusHandler};

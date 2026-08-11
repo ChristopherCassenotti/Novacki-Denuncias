@@ -1,6 +1,10 @@
 const { randomUUID } = require("node:crypto");
 
 const prisma = require("../../database/prisma");
+const {
+  assertActorCanGrantPermissions,
+  assertActorCanModifyRole,
+} = require("../../security/privilege.policy");
 
 function createServiceError(message, statusCode) {
   const error = new Error(message);
@@ -266,6 +270,12 @@ async function createRole(
         permissionIds
       );
 
+    await assertActorCanGrantPermissions(
+      tx,
+      actorUserId,
+      validPermissionIds
+    );
+
     await tx.roles.create({
       data: {
         id: roleId,
@@ -326,6 +336,12 @@ async function updateRole(
 
   ensureRoleCanBeModified(currentRole);
 
+  await assertActorCanModifyRole(
+    prisma,
+    actorUserId,
+    roleId
+  );
+
   const updateData = {};
 
   if (name !== undefined) {
@@ -384,12 +400,24 @@ async function replaceRolePermissions(
 
   ensureRoleCanBeModified(currentRole);
 
+  await assertActorCanModifyRole(
+    prisma,
+    actorUserId,
+    roleId
+  );
+
   await prisma.$transaction(async (tx) => {
     const validPermissionIds =
       await validatePermissionIds(
         tx,
         permissionIds
       );
+
+    await assertActorCanGrantPermissions(
+      tx,
+      actorUserId,
+      validPermissionIds
+    );
 
     const previousAssignments =
       await tx.role_permissions.findMany({
@@ -465,6 +493,12 @@ async function changeRoleStatus(
   );
 
   ensureRoleCanBeModified(currentRole);
+
+  await assertActorCanModifyRole(
+    prisma,
+    actorUserId,
+    roleId
+  );
 
   if (currentRole.is_active === isActive) {
     return getRoleById(roleId);

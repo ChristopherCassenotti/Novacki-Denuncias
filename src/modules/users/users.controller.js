@@ -93,7 +93,7 @@ async function createUserHandler(req, res) {
         return res.status(201).json({
             message: 'Usuário criado com sucesso.',
             data: result,
-            warning: 'A senha temporária é exibida somente nesta resposta.',
+            warning: 'O token de ativação é de uso único e deve ser entregue ao usuário por um canal seguro.',
         });
     }
     catch(error){
@@ -236,7 +236,7 @@ async function changeStatusHandler(req, res) {
 }
 
 async function resetPasswordHandler(req, res) {
-    const paramsValidation = userIdParamSchema(req.params);
+    const paramsValidation = userIdParamSchema.safeParse(req.params);
 
     if(!paramsValidation.success){
         return res.status(400).json({
@@ -246,7 +246,7 @@ async function resetPasswordHandler(req, res) {
         });
     }
 
-    const bodyValidation = resetUserPasswordSchema(req.body);
+    const bodyValidation = resetUserPasswordSchema.safeParse(req.body || {});
 
     if(!bodyValidation.success){
         return res.status(400).json({
@@ -257,14 +257,14 @@ async function resetPasswordHandler(req, res) {
     }
 
     try{
-        const result = await resetUserPassword(paramsValidation.data.id, bodyValidation.data.temporaryPassword, req.auth.userId);
+        const result = await resetUserPassword(paramsValidation.data.id, req.auth.userId);
 
         return res.status(200).json({
             message: 'Senha redefinida com sucesso.',
 
             data: result,
 
-            warning: 'A senha temporária é exibida somente nesta resposta.'
+            warning: 'O token de redefinição é de uso único e deve ser entregue ao usuário por um canal seguro.'
         });
     }
     catch(error){

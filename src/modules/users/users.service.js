@@ -1,4 +1,5 @@
 const {
+  createHash,
   randomUUID,
   randomBytes,
 } = require("node:crypto");
@@ -6,6 +7,10 @@ const {
 const bcrypt = require("bcryptjs");
 
 const prisma = require("../../database/prisma");
+const {
+  assertActorCanAssignRoles,
+  assertActorCanManageUser,
+} = require("../../security/privilege.policy");
 
 function createServiceError(message, statusCode) {
   const error = new Error(message);
@@ -22,10 +27,22 @@ function serializeAuditMetadata(metadata) {
   return JSON.stringify(metadata);
 }
 
-function generateTemporaryPassword() {
-  const randomPart = randomBytes(12).toString("base64url");
+function generateCredentialToken() {
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(token).digest();
+  const tokenMinutes = Number(
+    process.env.USER_CREDENTIAL_TOKEN_MINUTES || 30
+  );
+  const expiresAt = new Date(
+    Date.now() +
+      (Number.isFinite(tokenMinutes) && tokenMinutes > 0
+        ? tokenMinutes
+        : 30) *
+        60 *
+        1000
+  );
 
-  return `Nvk!${randomPart}9a`;
+  return { token, tokenHash, expiresAt };
 }
 
 async function findUserOrFail(database, userId) {
@@ -272,9 +289,14 @@ async function listUsers({
         },
       });
 
-    const userIds = assignments.map(
+    let userIds = assignments.map(
       (assignment) => assignment.user_id
     );
+
+    if (filteredUserIds !== null) {
+      const searchMatches = new Set(filteredUserIds);
+      userIds = userIds.filter((userId) => searchMatches.has(userId));
+    }
 
     if (userIds.length === 0) {
       return {
@@ -290,6 +312,10 @@ async function listUsers({
 
     where.id = {
       in: userIds,
+    };
+  } else if (filteredUserIds !== null) {
+    where.id = {
+      in: filteredUserIds,
     };
   }
 
@@ -345,7 +371,6 @@ async function createUser(
     name,
     email,
     roleIds,
-    temporaryPassword,
   },
   actorUserId
 ) {
@@ -366,12 +391,11 @@ async function createUser(
     );
   }
 
-  const generatedPassword =
-    temporaryPassword ||
-    generateTemporaryPassword();
+  const credential = generateCredentialToken();
+  const inaccessiblePassword = randomBytes(48).toString("base64url");
 
   const passwordHash = await bcrypt.hash(
-    generatedPassword,
+    inaccessiblePassword,
     12
   );
 
@@ -383,6 +407,12 @@ async function createUser(
         tx,
         roleIds
       );
+
+    await assertActorCanAssignRoles(
+      tx,
+      actorUserId,
+      validRoleIds
+    );
 
     await tx.users.create({
       data: {
@@ -403,6 +433,16 @@ async function createUser(
       skipDuplicates: true,
     });
 
+    await tx.user_one_time_tokens.create({
+      data: {
+        id: randomUUID(),
+        user_id: userId,
+        type: "USER_INVITATION",
+        token_hash: credential.tokenHash,
+        expires_at: credential.expiresAt,
+      },
+    });
+
     await tx.audit_logs.create({
       data: {
         actor_type: "ADMIN",
@@ -418,8 +458,7 @@ async function createUser(
             name,
             email,
             roleIds: validRoleIds,
-            temporaryPasswordGenerated:
-              temporaryPassword === undefined,
+            credentialFlow: "ONE_TIME_USER_INVITATION",
           }),
       },
     });
@@ -428,11 +467,11 @@ async function createUser(
   return {
     user: await getUserById(userId),
 
-    temporaryPassword:
-      generatedPassword,
-
-    passwordWasGenerated:
-      temporaryPassword === undefined,
+    credentialSetup: {
+      type: "USER_INVITATION",
+      token: credential.token,
+      expiresAt: credential.expiresAt,
+    },
   };
 }
 
@@ -449,6 +488,12 @@ async function updateUser(
       prisma,
       userId
     );
+
+  await assertActorCanManageUser(
+    prisma,
+    actorUserId,
+    userId
+  );
 
   if (
     email !== undefined &&
@@ -539,12 +584,24 @@ async function replaceUserRoles(
     );
   }
 
+  await assertActorCanManageUser(
+    prisma,
+    actorUserId,
+    userId
+  );
+
   await prisma.$transaction(async (tx) => {
     const validRoleIds =
       await validateRoleIds(
         tx,
         roleIds
       );
+
+    await assertActorCanAssignRoles(
+      tx,
+      actorUserId,
+      validRoleIds
+    );
 
     const previousAssignments =
       await tx.user_roles.findMany({
@@ -625,6 +682,12 @@ async function changeUserStatus(
     );
   }
 
+  await assertActorCanManageUser(
+    prisma,
+    actorUserId,
+    userId
+  );
+
   if (
     currentUser.is_active === isActive
   ) {
@@ -686,7 +749,6 @@ async function changeUserStatus(
 
 async function resetUserPassword(
   userId,
-  temporaryPassword,
   actorUserId
 ) {
   await findUserOrFail(
@@ -701,12 +763,17 @@ async function resetUserPassword(
     );
   }
 
-  const generatedPassword =
-    temporaryPassword ||
-    generateTemporaryPassword();
+  await assertActorCanManageUser(
+    prisma,
+    actorUserId,
+    userId
+  );
+
+  const credential = generateCredentialToken();
+  const inaccessiblePassword = randomBytes(48).toString("base64url");
 
   const passwordHash = await bcrypt.hash(
-    generatedPassword,
+    inaccessiblePassword,
     12
   );
 
@@ -740,6 +807,16 @@ async function resetUserPassword(
       },
     });
 
+    await tx.user_one_time_tokens.create({
+      data: {
+        id: randomUUID(),
+        user_id: userId,
+        type: "PASSWORD_RESET",
+        token_hash: credential.tokenHash,
+        expires_at: credential.expiresAt,
+      },
+    });
+
     await tx.audit_logs.create({
       data: {
         actor_type: "ADMIN",
@@ -752,8 +829,7 @@ async function resetUserPassword(
 
         metadata_json:
           serializeAuditMetadata({
-            temporaryPasswordGenerated:
-              temporaryPassword === undefined,
+            credentialFlow: "ONE_TIME_PASSWORD_RESET",
             sessionsRevoked: true,
           }),
       },
@@ -763,11 +839,11 @@ async function resetUserPassword(
   return {
     user: await getUserById(userId),
 
-    temporaryPassword:
-      generatedPassword,
-
-    passwordWasGenerated:
-      temporaryPassword === undefined,
+    credentialSetup: {
+      type: "PASSWORD_RESET",
+      token: credential.token,
+      expiresAt: credential.expiresAt,
+    },
   };
 }
 

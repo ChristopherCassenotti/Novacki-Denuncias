@@ -1,5 +1,6 @@
-const { loginSchema, changeInitialPasswordSchema } = require('./auth.schema');
+const { loginSchema, changeInitialPasswordSchema, completeCredentialSetupSchema } = require('./auth.schema');
 const { authenticateAdmin, changeInitialPassword } = require('./auth.service');
+const { completeCredentialSetup: completeCredentialSetupService } = require('./credential.service');
 const { setSessionCookie } = require('./auth.cookies');
 const { revokeSession } = require('./session.service');
 const { getSessionCookieName, clearSessionCookie } = require('./auth.cookies');
@@ -20,7 +21,10 @@ async function login(req, res) {
     
     
     try{
-        const result = await authenticateAdmin(validate.data);
+        const result = await authenticateAdmin(validate.data, {
+          ip: req.ip,
+          userAgent: req.get("user-agent"),
+        });
 
         if(!result){
             return res.status(401).json({
@@ -50,7 +54,7 @@ async function login(req, res) {
         });
     }
     catch(error){
-        console.log("Erro no login administrativo:", error);
+        console.error("Erro no login administrativo:", error.message);
 
         return res.status(500).json({
             message: "Não foi possível realizar o login."
@@ -129,4 +133,33 @@ async function logout(req, res) {
     };
 }
 
-module.exports = {login, changePassword, me, logout};
+async function completeCredentialSetup(req, res) {
+  const validation = completeCredentialSetupSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    return res.status(400).json({
+      message: "Dados de credencial inválidos.",
+      errors: validation.error.issues.map((issue) => ({
+        field: issue.path.join("."),
+        message: issue.message,
+      })),
+    });
+  }
+
+  try {
+    const result = await completeCredentialSetupService(validation.data);
+    return res.status(200).json({
+      message: "Senha definida com sucesso. Faça login para continuar.",
+      data: result,
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.statusCode
+          ? error.message
+          : "Não foi possível definir a senha.",
+    });
+  }
+}
+
+module.exports = {login, changePassword, completeCredentialSetup, me, logout};

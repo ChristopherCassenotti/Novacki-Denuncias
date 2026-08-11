@@ -43,8 +43,6 @@ const createUserSchema = z.object({
     .max(191, "O e-mail pode ter no máximo 191 caracteres."),
 
   roleIds: roleIdsSchema,
-
-  temporaryPassword: strongPasswordSchema.optional(),
 });
 
 const updateUserSchema = z
@@ -81,9 +79,7 @@ const changeUserStatusSchema = z.object({
   }),
 });
 
-const resetUserPasswordSchema = z.object({
-  temporaryPassword: strongPasswordSchema.optional(),
-});
+const resetUserPasswordSchema = z.object({}).strict();
 
 const listUsersQuerySchema = z.object({
   page: z.coerce

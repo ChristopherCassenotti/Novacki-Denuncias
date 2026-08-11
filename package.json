@@ -15,7 +15,8 @@
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test",
+    "test:security": "node --test test/security/*.test.js",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js"
   },

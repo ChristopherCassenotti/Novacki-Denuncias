@@ -1,7 +1,6 @@
 const { randomUUID } = require('node:crypto');
 
 const prisma = require('../../database/prisma');
-const { boolean } = require('zod');
 
 function createServiceError(message, statusCode){
     const error = new Error(message);
@@ -29,7 +28,7 @@ function normalizeDescription(description){
 }
 
 async function findTeamOrFail(database, teamId) {
-    const team = await prisma.teams.findUnique({
+    const team = await database.teams.findUnique({
         where: {
             id: teamId,
         },
@@ -56,7 +55,7 @@ async function validateMembers(database, members) {
         return [];
     }
 
-    const userIds = members.map((member) => member.userIds);
+    const userIds = members.map((member) => member.userId);
 
     const users = await database.users.findMany({
         where:{
@@ -130,7 +129,7 @@ async function attachMembers(team) {
             joinedAt: assignment.joined_at,
         }
     })
-    .filter(boolean);
+    .filter(Boolean);
 
     return {
         ...team,
@@ -251,6 +250,7 @@ async function updateTeam(teamId, data, actorUserId) {
                 actor_user_id: actorUserId,
                 action: 'TEAM_UPDATED',
                 entity_type: 'TEAM',
+                entity_id: teamId,
                 success: true,
                 request_id: randomUUID(),
                 metadata_json: serializeAuditMetadata({
