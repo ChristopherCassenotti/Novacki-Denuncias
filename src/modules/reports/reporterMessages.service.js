@@ -4,7 +4,7 @@ const { encryptJson, decryptJson } = require('../../security/crypto.service');
 
 function createServiceError(message, statusCode){
     const error = new Error();
-    statusCode = error.statusCode;
+    error.statusCode = statusCode;
 
     return error;
 }
