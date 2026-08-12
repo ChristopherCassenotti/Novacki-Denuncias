@@ -95,17 +95,31 @@ function encryptBuffer(plaintextBuffer, purpose){
         keyVersion,
     }
 }
-
-function decryptBuffer({ciphertext,iv,authTag,keyVersion}, purpose){
-    if(!Buffer.isBuffer(ciphertext)){
-        throw createCryptoError('Ciphertext inválido.');
+function normalizeBuffer(value, fieldName){
+    if(Buffer.isBuffer(value)){
+        return value;
     }
 
-    if(!Buffer.isBuffer(iv) || iv.length !== IV_LENGTH){
+    if(value instanceof Uint8Array){
+        return Buffer.from(value);
+    }
+
+    throw createCryptoError(`${fieldName} inválido.`);
+}
+
+function decryptBuffer({ciphertext,iv,authTag,keyVersion}, purpose){
+    
+    const normalizedCiphertext = normalizeBuffer(ciphertext, 'Ciphertext');
+
+    const normalizedIv = normalizeBuffer(iv, 'IV');
+
+    const normalizedAuthTag = normalizeBuffer(authTag, 'Authentication tag');
+
+    if(normalizedIv.length !== IV_LENGTH){
         throw createCryptoError('IV inválido.');
     }
 
-    if(!Buffer.isBuffer(authTag) || authTag.length !== AUTH_TAG_LENGTH){
+    if(normalizedAuthTag.length !== AUTH_TAG_LENGTH){
         throw createCryptoError('Authentication tag inválida.');
     }
 
@@ -114,14 +128,14 @@ function decryptBuffer({ciphertext,iv,authTag,keyVersion}, purpose){
     const aad = createAdditionalAuthenticatedData(purpose, keyVersion);
     
     try{
-        const decipher = createDecipheriv(ALGORITHM, key, iv, { authTag: AUTH_TAG_LENGTH });
+        const decipher = createDecipheriv(ALGORITHM, key, normalizedIv, { authTag: AUTH_TAG_LENGTH });
 
         decipher.setAAD(aad);
-        decipher.setAuthTag(authTag);
+        decipher.setAuthTag(normalizedAuthTag);
         
 
         return Buffer.concat([
-            decipher.update(ciphertext),
+            decipher.update(normalizedCiphertext),
             decipher.final(),
         ]);
     }
@@ -157,5 +171,6 @@ function decryptJson(encryptedData, purpose){
         throw createCryptoError('O conteúdo descriptografado não contém JSON válido.');
     }
 }
+
 
 module.exports = {encryptBuffer, decryptBuffer, encryptJson, decryptJson, getCurrentKeyVersion};
