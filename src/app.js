@@ -7,6 +7,7 @@ const permissionsRoutes = require('./modules/permissions/permissions.routes');
 const usersRoutes = require('./modules/users/users.routes');
 const teamsRoutes = require('./modules/teams/temas.routes');
 const publicRoutes = require('./modules/public/public.routes');
+const adminReportsRoutes = require('./modules/adminReports/admin.routes');
 const { apiRateLimiter } = require('./modules/auth/auth.rateLimit');
 const {
   errorHandler,
@@ -37,6 +38,7 @@ app.use('/api/admin/roles', roleRoutes);
 app.use('/api/admin/permissions', permissionsRoutes);
 app.use('/api/admin/users', usersRoutes);
 app.use('/api/admin/teams', teamsRoutes);
+app.use('/api/admin/reports', adminReportsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

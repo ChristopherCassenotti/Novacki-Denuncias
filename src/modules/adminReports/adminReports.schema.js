@@ -72,8 +72,54 @@ const listReportsQuerySchema = z.object({
     )
     .optional(),
 });
+const updateReportStatusSchema = z.object({
+  status: z.enum([
+    "RECEIVED",
+    "INITIAL_REVIEW",
+    "WAITING_REPORTER_INFORMATION",
+    "INVESTIGATING",
+    "FORWARDED",
+    "CONCLUDED",
+    "ARCHIVED",
+  ]),
+
+  expectedVersion: z
+    .number()
+    .int()
+    .min(1),
+});
+
+const updateReportPrioritySchema = z.object({
+  priority: z.enum([
+    "LOW",
+    "NORMAL",
+    "HIGH",
+    "CRITICAL",
+  ]),
+});
+
+const assignReportSchema = z.object({
+  targetType: z.enum([
+    "USER",
+    "TEAM",
+  ]),
+
+  targetId: z
+    .string()
+    .uuid("Usuário ou equipe inválido."),
+
+  reason: z
+    .string()
+    .trim()
+    .max(2000)
+    .optional()
+    .nullable(),
+});
 
 module.exports = {
   reportIdParamSchema,
   listReportsQuerySchema,
+  updateReportStatusSchema,
+  updateReportPrioritySchema,
+  assignReportSchema,
 };
