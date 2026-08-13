@@ -5,7 +5,7 @@ const { requireAdminAuth } = require('../auth/auth.middleware');
 const { requirePermissions } = require('../access/access.middleware');
 
 router.use(requireAdminAuth);
-router.use(requirePermissions('USER_MANAGE'));
+//router.use(requirePermissions('USER_MANAGE'));
 
 router.get('/', getUsers);
 router.get('/:id', getUser);

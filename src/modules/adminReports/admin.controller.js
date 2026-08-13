@@ -1,5 +1,5 @@
-const { reportIdParamSchema, listReportsQuerySchema } = require('./adminReports.schema');
-const { listAdminReports, getAdminReport } = require('./adminReports.service');
+const { updateReportPrioritySchema, updateReportStatusSchema, assignReportSchema, reportIdParamSchema, listReportsQuerySchema } = require('./adminReports.schema');
+const { listAdminReports, getAdminReport, updateReportPriority, updateReportStatus, assignReport, unassignReport } = require('./adminReports.service');
 
 function formatValidantionErrors(error){
     return error.issues.map((issue) => ({
@@ -68,4 +68,120 @@ async function getReportHandler(req, res) {
     }
 }
 
-module.exports = { getReportsHandler, getReportHandler, updateReportStatusSchema, updateReportPrioritySchema, assignReportSchema };
+async function updateStatusHandler(req, res) {
+    const params = reportIdParamSchema.safeParse(req.params);
+
+    const body = updateReportStatusSchema.safeParse(req.body);
+
+    if(!params.success){
+        return res.status(400).json({
+            message: 'ID da denúncia inválido.',
+        });
+    }
+
+    if(!body.success){
+        return res.status(400).json({
+            message: 'Dados de status inválidos.',
+
+            errors: formatValidantionErrors(body.error),
+        });
+    }
+    
+    try{
+        const report = await updateReportStatus(params.data.id, body.data, req.auth.userId);
+
+        return res.status(200).json({
+            message: 'Status atualizado com sucesso.',
+
+            data:{
+                report,
+            }
+        });
+    }
+    catch(error){
+        return sendError(res, error, 'Não foi possível alterar o status.');
+    }
+}
+
+async function updatePriorityHandler(req, res) {
+    const params = reportIdParamSchema.safeParse(req.params);
+
+    const body = updateReportPrioritySchema.safeParse(req.body);
+
+    if(!params.success || !body.success){
+        return res.status(400).json({
+            message: 'Dados inválidos.'
+        });
+    }
+
+    try{
+        const report = await updateReportPriority(params.data.id, body.data, req.auth.userId);
+
+        return res.status(200).json({
+            message: 'Prioridade atualizada com sucesso.',
+
+            data:{
+                report,
+            }
+        });
+    }
+    catch(error){
+        return sendError(res, error, 'Não foi possível alterar a prioridade.');
+    }
+}
+
+async function assignReportHandler(req, res) {
+    const params = reportIdParamSchema.safeParse(req.params);
+
+    const body = assignReportSchema.safeParse(req.body);
+
+    if(!params.success || !body.success){
+        return res.status(400).json({
+            message: 'Dados de atribuição inválidos.',
+        });
+    }
+
+    try{
+        const report = 
+            await assignReport(params.data.id, body.data, req.auth.userId);
+
+        return res.status(200).json({
+            message: 'Denúncia atribuída com sucesso.',
+
+            data:{
+                report,
+            },
+        });
+    }
+    catch(error){
+        return sendError(res, error, 'Não foi possível atribuir a denúncia.');
+    }
+}
+
+async function unassignReportHandler(req, res) {
+    const params = reportIdParamSchema.safeParse(req.params);
+
+    if(!params.success){
+        return res.status(400).json({
+            message: 'ID da denúncia inválido.',
+        });
+    }
+
+    try{
+        const report =
+            await unassignReport(params.data.id, req.adminAuth.userId);
+
+        return res.status(200).json({
+            message: 'Resposável removido com sucesso.',
+
+            data:{
+                report,
+            },
+        });
+    }
+    catch(error){
+        return sendError(res, error, 'Não foi possível remover o responsável.');
+    }
+}
+
+module.exports = { getReportsHandler, getReportHandler, updateStatusHandler, updatePriorityHandler, assignReportHandler, unassignReportHandler };

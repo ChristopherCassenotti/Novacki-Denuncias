@@ -292,8 +292,588 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
     const now = new Date();
 
     await prisma.$transaction(async (tx) => {
-        const current
-    })
+        const current = await tx.reports.findUnique({
+            where:{
+                id: reportId,
+            },
+
+            select:{
+                id: true,
+                protocol: true,
+                status: true,
+                status_version: true,
+                concluded_at: true,
+                archived_at: true,
+            },
+        });
+
+        if(!current){
+            throw createServiceError('Denúncia não encotrada.', 404);
+        }
+
+        if(current.status_version !== expectedVersion){
+            throw createServiceError('A denúncia foi alterada por outro usuário. Atualize os dados e tente novamente.', 409);
+        }
+
+        if(current.status === status){
+            throw createServiceError('A denúncia já está com este status.', 409);
+        }
+        
+        if(current.status === 'ARCHIVED' && status !== 'ARCHIVED'){
+            throw createServiceError('Uma denúncia arquivada não pode ter os status alterado.', 409);
+        }
+
+        const updateData = {
+            status,
+
+            status_version:{
+                increment: 1,
+            },
+
+            last_activity_at: now,
+        };
+
+        if(status === 'CONCLUDED'){
+            updateData.concluded_at = now;
+        }
+
+        if(current.status === 'CONCLUDED' && status !== 'CONCLUDED'){
+            updateData.concluded_at = null;
+        }
+
+        if(status === 'ARCHIVED'){
+            updateData.archived_at = now;
+        }
+
+        const result = await tx.reports.updateMany({
+            where:{
+                id: reportId,
+            
+                status_version: expectedVersion,
+            },
+
+            data: updateData,
+        });
+
+        if(result.count !== 1){
+            throw createServiceError('A denúncia foi alterada por outro usuário. Atualize os dados e tente novamente', 409);
+        }
+
+        let eventType = 'STATUS_CHANGED';
+
+        if(status === 'CONCLUDED'){
+            eventType = 'REPORT_CONCLUDED';
+        }
+
+        if(status === 'ARCHIVED'){
+            eventType = 'REPORT_ARCHIVED';
+        }
+
+        await tx.report_events.create({
+            data:{
+                id: randomUUID(),
+                report_id: reportId,
+                event_type: eventType,
+                actor_type: 'ADMIN',
+                actor_user_id: actorUserId,
+                previous_status: current.status,
+                new_status: status,
+            },
+        });
+
+        await tx.audit_logs.create({
+            data:{
+                actor_type: 'ADMIN',
+                actor_user_id: actorUserId,
+                action: 'REPORT_STATUS_CHANGED',
+                entity_type: 'REPORT',
+                entity_id: reportId,
+                success: true,
+                request_id: randomUUID(),
+                metadata_json: auditMetadata({
+                    protocol: current.protocol,
+                    previousStatus: current.status,
+                    newStatus: status,
+                }),
+            },
+        });
+    });
+
+    return getAdminReport(reportId);
 }
 
-module.exports = { listAdminReports, getAdminReport, };
+async function updateReportPriority(reportId, {priority}, actorUserId) {
+    const now = new Date();
+
+    await prisma.$transaction(async (tx) => {
+        const current = await tx.reports.findUnique({
+            where:{
+                id: reportId,
+            },
+
+            select:{
+                id: true,
+                protocol: true,
+                priority: true,
+                status: true,
+            },
+        });
+
+        if(!current){
+            throw createServiceError('Denúncia não encontrada.', 404);
+        }
+
+        if(current.status === 'ARCHIVED'){
+            throw createServiceError('Uma denúncia arquivada não pode ter a prioridade alterada.', 409);
+        }
+
+        if(current.priority === priority){
+            throw createServiceError('A denúncia já possui esta prioridade.', 409);
+        }
+
+        const metadata = encryptJson({
+            previousPriority: current.priority,
+            newPriority: priority,
+        },
+        'REPORT_EVENT_METADATA'
+        );
+    
+        await tx.reports.update({
+            where:{
+                id: reportId,
+            },
+
+            data:{
+                priority,
+
+                last_activity_at: now,
+            },
+        });
+
+        await tx.report_events.create({
+            data:{
+                id: randomUUID(),
+                report_id: reportId,
+                event_type: 'PRIORITY_CHANGED',
+                actor_type: 'ADMIN',
+                actor_user_id: actorUserId,
+                metadata_ciphertext: metadata.ciphertext,
+                metadata_iv: metadata.iv,
+                metadata_auth_tag: metadata.authTag,
+                metadata_key_version: metadata.keyVersion,
+            },
+        });
+
+        await tx.audit_logs.create({
+            data:{
+                actor_type: 'ADMIN',
+                actor_user_id: actorUserId,
+                action: 'REPORT_PRIORITY_CHANGED',
+                entity_type: 'REPORT',
+                entity_id: reportId,
+                success: true,
+                request_id: randomUUID(),
+                metadata_json: auditMetadata({
+                    protocol: current.protocol,
+                    previousPriority: current.priority,
+                    newPriority: priority,
+                }),
+            },
+        });
+    });
+
+    return getAdminReport(reportId);
+}
+
+async function assignReport(
+  reportId,
+  {
+    targetType,
+    targetId,
+    reason,
+  },
+  actorUserId
+) {
+  const now = new Date();
+
+  await prisma.$transaction(
+    async (tx) => {
+      const report =
+        await tx.reports.findUnique({
+          where: {
+            id: reportId,
+          },
+
+          select: {
+            id: true,
+            protocol: true,
+            status: true,
+
+            current_assignee_user_id:
+              true,
+
+            current_assignee_team_id:
+              true,
+          },
+        });
+
+      if (!report) {
+        throw createServiceError(
+          "Denúncia não encontrada.",
+          404
+        );
+      }
+
+      if (
+        report.status ===
+        "ARCHIVED"
+      ) {
+        throw createServiceError(
+          "Uma denúncia arquivada não pode ser atribuída.",
+          409
+        );
+      }
+
+      /*
+       * Valida usuário quando o destino
+       * da atribuição for USER.
+       */
+      if (
+        targetType === "USER"
+      ) {
+        const user =
+          await tx.users.findUnique({
+            where: {
+              id: targetId,
+            },
+
+            select: {
+              id: true,
+              is_active: true,
+            },
+          });
+
+        if (
+          !user ||
+          !user.is_active
+        ) {
+          throw createServiceError(
+            "Usuário responsável inválido ou inativo.",
+            400
+          );
+        }
+      }
+
+      /*
+       * Valida equipe quando o destino
+       * da atribuição for TEAM.
+       *
+       * IMPORTANTE:
+       * Este if fica fora do if USER.
+       */
+      if (
+        targetType === "TEAM"
+      ) {
+        const team =
+          await tx.teams.findUnique({
+            where: {
+              id: targetId,
+            },
+
+            select: {
+              id: true,
+              is_active: true,
+            },
+          });
+
+        if (
+          !team ||
+          !team.is_active
+        ) {
+          throw createServiceError(
+            "Equipe responsável inválida ou inativa.",
+            400
+          );
+        }
+      }
+
+      /*
+       * Criptografa o motivo da atribuição,
+       * caso tenha sido informado.
+       */
+      const normalizedReason =
+        reason?.trim() || null;
+
+      let encryptedReason =
+        null;
+
+      if (normalizedReason) {
+        encryptedReason =
+          encryptJson(
+            {
+              reason:
+                normalizedReason,
+            },
+            "REPORT_ASSIGNMENT_REASON"
+          );
+      }
+
+      /*
+       * Encerra atribuição atual.
+       */
+      await tx.report_assignments.updateMany({
+        where: {
+          report_id:
+            reportId,
+
+          ended_at:
+            null,
+        },
+
+        data: {
+          ended_at:
+            now,
+        },
+      });
+
+      /*
+       * Registra a nova atribuição
+       * no histórico.
+       */
+      await tx.report_assignments.create({
+        data: {
+          id:
+            randomUUID(),
+
+          report_id:
+            reportId,
+
+          assigned_user_id:
+            targetType === "USER"
+              ? targetId
+              : null,
+
+          assigned_team_id:
+            targetType === "TEAM"
+              ? targetId
+              : null,
+
+          assigned_by_user_id:
+            actorUserId,
+
+          type:
+            targetType === "USER"
+              ? "PRIMARY"
+              : "TEAM",
+
+          reason_ciphertext:
+            encryptedReason
+              ?.ciphertext ?? null,
+
+          reason_iv:
+            encryptedReason
+              ?.iv ?? null,
+
+          reason_auth_tag:
+            encryptedReason
+              ?.authTag ?? null,
+
+          reason_key_version:
+            encryptedReason
+              ?.keyVersion ?? null,
+
+          started_at:
+            now,
+        },
+      });
+
+      /*
+       * Atualiza o responsável atual
+       * na denúncia.
+       */
+      await tx.reports.update({
+        where: {
+          id: reportId,
+        },
+
+        data: {
+          current_assignee_user_id:
+            targetType === "USER"
+              ? targetId
+              : null,
+
+          current_assignee_team_id:
+            targetType === "TEAM"
+              ? targetId
+              : null,
+
+          last_activity_at:
+            now,
+        },
+      });
+
+      /*
+       * Evento histórico da denúncia.
+       */
+      const metadata =
+        encryptJson(
+          {
+            targetType,
+            targetId,
+          },
+          "REPORT_EVENT_METADATA"
+        );
+
+      await tx.report_events.create({
+        data: {
+          id:
+            randomUUID(),
+
+          report_id:
+            reportId,
+
+          event_type:
+            "ASSIGNED",
+
+          actor_type:
+            "ADMIN",
+
+          actor_user_id:
+            actorUserId,
+
+          metadata_ciphertext:
+            metadata.ciphertext,
+
+          metadata_iv:
+            metadata.iv,
+
+          metadata_auth_tag:
+            metadata.authTag,
+
+          metadata_key_version:
+            metadata.keyVersion,
+        },
+      });
+
+      /*
+       * Auditoria administrativa.
+       */
+      await tx.audit_logs.create({
+        data: {
+          actor_type:
+            "ADMIN",
+
+          actor_user_id:
+            actorUserId,
+
+          action:
+            "REPORT_ASSIGNED",
+
+          entity_type:
+            "REPORT",
+
+          entity_id:
+            reportId,
+
+          success:
+            true,
+
+          request_id:
+            randomUUID(),
+
+          metadata_json:
+            auditMetadata({
+              protocol:
+                report.protocol,
+
+              targetType,
+              targetId,
+            }),
+        },
+      });
+    }
+  );
+
+  return getAdminReport(
+    reportId
+  );
+}
+
+async function unassignReport(reportId, actorUserId) {
+    const now = new Date();
+
+    await prisma.$transaction(async (tx) => {
+        const report = await tx.reports.findUnique({
+            where:{
+                id: reportId,
+            },
+
+            select:{
+                id: true,
+                protocol: true,
+                status: true,
+                current_assignee_user_id: true,
+                current_assignee_team_id: true,
+            },
+        });
+
+        if(!report){
+            throw createServiceError('Denúncia não encotrada.', 404);
+        }
+
+        if(!report.current_assignee_user_id && !report.current_assignee_team_id){
+            throw createServiceError('A denúncia não possui resposável atribuído.', 409);
+        }
+
+        await tx.report_assignments.updateMany({
+            where:{
+                report_id: reportId,
+                ended_at: null,
+            },
+            data:{
+                ended_at: now,
+            },
+        });
+
+        await tx.reports.update({
+            where:{
+                id: reportId,
+            },
+
+            data:{
+                current_assignee_user_id: null,
+                current_assignee_team_id: null,
+                last_activity_at: now,
+            },
+        });
+
+        await tx.report_events.create({
+            data:{
+                id: randomUUID(),
+                report_id: reportId,
+                event_type: 'UNASSIGNED',
+                actor_type: 'ADMIN',
+                actor_user_id: actorUserId,
+            },
+        });
+
+        await tx.audit_logs.create({
+            data:{
+                actor_type: 'ADMIN',
+                actor_user_id: actorUserId,
+                action: 'REPORT_UNASSIGNED',
+                entity_type: 'REPORT',
+                entity_id: reportId,
+                success: true,
+                request_id: randomUUID(),
+                metadata_json: auditMetadata({
+                    protocol: report.protocol,
+                }),
+            },
+        });
+    });
+    
+    return getAdminReport(reportId);
+}
+
+module.exports = { listAdminReports, getAdminReport, updateReportStatus, updateReportPriority, assignReport, unassignReport };
