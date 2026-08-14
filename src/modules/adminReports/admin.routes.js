@@ -10,6 +10,8 @@ const { listRestrictionsHandler,createRestrictionHandler,revokeRestrictionHandle
 const { requireReportAccess } = require('../reports/reportAccess.middleware');
 const { listAccessGrantsHandler, createAccessGrantHandler, revokeAccessGrantHandler } = require('../adminReportAccessGrants/adminReportAccessGrants.controller');
 const { requireReportCapability, } = require("../access/reportCapability.middleware");
+const { uploadAttachment, } = require("../adminReportAttachments/adminReportAttachments.upload");
+const { listAttachmentsHandler,createAttachmentHandler, } = require("../adminReportAttachments/adminReportAttachments.controller");
 
 router.use(requireAdminAuth);
 router.use(requirePermissions('REPORT_VIEW'));
@@ -22,11 +24,13 @@ router.get('/:id/internal-notes', requireReportCapability({permission:"REPORT_IN
 router.get('/:id/identity', requirePermissions('REPORT_IDENTITY_VIEW'), getIdentityHandler);
 router.get('/:id/restrictions', requirePermissions('REPORT_RESTRICTION_MANAGE'), listRestrictionsHandler);
 router.get('/:id/access-grants',requirePermissions('REPORT_ACCESS_GRANT_MANAGE'),listAccessGrantsHandler);
+router.get("/:id/attachments",requireReportCapability({permission:"REPORT_ATTACHMENT",scope:"INVESTIGATE",}),listAttachmentsHandler);
 
 router.post('/:id/messages', requireReportCapability({permission:"REPORT_MESSAGE",scope:"MESSAGE",}), createMessageHandler);
 router.post('/:id/internal-notes', requireReportCapability({permission:"REPORT_INTERNAL_NOTE",scope:"INVESTIGATE",}), createInternalNoteHandler);
 router.post('/:id/restrictions', requirePermissions('REPORT_RESTRICTION_MANAGE'), createRestrictionHandler);
 router.post('/:id/access-grants',requirePermissions('REPORT_ACCESS_GRANT_MANAGE'),createAccessGrantHandler);
+router.post("/:id/attachments",requireReportCapability({permission:"REPORT_ATTACHMENT",scope:"INVESTIGATE",}),uploadAttachment,createAttachmentHandler);
 
 router.patch('/:id/status', requireReportCapability({permission:"REPORT_MANAGE",scope:"MANAGE",}), updateStatusHandler);
 router.patch('/:id/priority', requireReportCapability({permission:"REPORT_MANAGE",scope:"MANAGE",}), updatePriorityHandler);
