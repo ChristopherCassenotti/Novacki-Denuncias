@@ -131,43 +131,86 @@ async function attachReferenceData(reports) {
     );
 }
 
-async function listAdminReports({page, limit, status, priority, categoryId, unitId, mode, immediateRisk}) {
+async function listAdminReports(
+    {
+        page,
+        limit,
+        status,
+        priority,
+        categoryId,
+        unitId,
+        mode,
+        immediateRisk,
+    },
+    actorUserId
+) {
     const where = {};
 
-    if(status){
+    if (status) {
         where.status = status;
     }
 
-    if(priority){
+    if (priority) {
         where.priority = priority;
     }
-    
-    if(categoryId){
-        where.categoryId = categoryId;
+
+    if (categoryId) {
+        where.category_id = categoryId;
     }
 
-    if(unitId){
-        where.unitId = unitId;
+    if (unitId) {
+        where.unit_id = unitId;
     }
 
-    if(mode){
+    if (mode) {
         where.mode = mode;
     }
 
-    if(immediateRisk !== undefined){
+    if (immediateRisk !== undefined) {
         where.immediate_risk = immediateRisk;
     }
 
-    const skip = (page - 1) * limit;
+    const access =
+        await getReportListAccess(
+            actorUserId
+        );
 
-    const [total, reports,] = await Promise.all([prisma.reports.count({where,}),
+    if (access.global) {
+        if (
+            access.restrictedReportIds.length > 0
+        ) {
+            where.id = {
+                notIn:
+                    access.restrictedReportIds,
+            };
+        }
+    } else {
+        where.id = {
+            in:
+                access.grantedReportIds,
+        };
+    }
+
+    const skip =
+        (page - 1) * limit;
+
+    const [
+        total,
+        reports,
+    ] = await Promise.all([
+        prisma.reports.count({
+            where,
+        }),
 
         prisma.reports.findMany({
             where,
-            skip,
-            take: limit,
 
-            select:{
+            skip,
+
+            take:
+                limit,
+
+            select: {
                 id: true,
                 protocol: true,
                 mode: true,
@@ -187,28 +230,37 @@ async function listAdminReports({page, limit, status, priority, categoryId, unit
 
             orderBy: [
                 {
-                    immediate_risk: 'desc',
+                    immediate_risk:
+                        "desc",
                 },
                 {
-                    created_at: 'desc',
+                    created_at:
+                        "desc",
                 },
             ],
         }),
     ]);
 
-    const reportsWithReferences = await attachReferenceData(reports);
+    const reportsWithReferences =
+        await attachReferenceData(
+            reports
+        );
 
     return {
-        reports: reportsWithReferences,
+        reports:
+            reportsWithReferences,
 
-        pagination:{
+        pagination: {
             page,
             limit,
             total,
-            totalPages: 
+
+            totalPages:
                 total === 0
                     ? 0
-                    : Math.ceil(total/limit),
+                    : Math.ceil(
+                        total / limit
+                    ),
         },
     };
 }

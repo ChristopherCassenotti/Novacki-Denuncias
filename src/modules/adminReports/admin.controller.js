@@ -32,7 +32,7 @@ async function getReportsHandler(req, res) {
     }
 
     try{
-        const result = await listAdminReports(validation.data);
+        const result = await listAdminReports(validation.data, req.auth.userId);
 
         return res.status(200).json({
             data: result,
