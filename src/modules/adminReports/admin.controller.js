@@ -169,10 +169,10 @@ async function unassignReportHandler(req, res) {
 
     try{
         const report =
-            await unassignReport(params.data.id, req.adminAuth.userId);
+            await unassignReport(params.data.id, req.auth.userId);
 
         return res.status(200).json({
-            message: 'Resposável removido com sucesso.',
+            message: 'Responsável removido com sucesso.',
 
             data:{
                 report,
