@@ -172,7 +172,7 @@ async function changeStatusHandler(req, res) {
     if(!paramsValidation.success){
         return res.status(400).json({
             message:'ID da equipe inválido',
-            erros: formatValidationErrors(paramsValidation.error),
+            errors: formatValidationErrors(paramsValidation.error),
         })
     }
 

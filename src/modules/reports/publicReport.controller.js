@@ -27,7 +27,7 @@ async function createPublicReportHandler(req, res) {
             data:{
                 protocol: result.protocol,
                 accessSecret: result.accessSecret,
-                createAt: result.createdAt,
+                createdAt: result.createdAt,
             },
 
             warning: 'Guarde o protocolo e a chave secreta. A chave não poderá ser recuperada posteriormente.',

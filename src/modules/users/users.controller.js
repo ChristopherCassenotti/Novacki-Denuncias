@@ -35,7 +35,7 @@ async function getUsers(req, res) {
         return res.status(400).json({
             message: 'Filtros de usuários inválidos.',
 
-            erros: formatValidationErrors(validation.error),
+            errors: formatValidationErrors(validation.error),
         });
     }
 
@@ -58,7 +58,7 @@ async function getUser(req, res) {
         return res.status(400).json({
             message: 'ID de usuário inválido.',
 
-            error: formatValidationErrors(validation.error),
+            errors: formatValidationErrors(validation.error),
         });
     }
 

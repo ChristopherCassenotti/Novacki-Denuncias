@@ -42,7 +42,6 @@ async function findReportOrFail(
 
       select: {
         id: true,
-        protocol: true,
       },
     });
 
@@ -475,9 +474,6 @@ async function createAccessGrant(
 
           metadata_json:
             auditMetadata({
-              protocol:
-                report.protocol,
-
               userId,
               scope,
 
@@ -593,9 +589,6 @@ async function revokeAccessGrant(
 
           metadata_json:
             auditMetadata({
-              protocol:
-                report.protocol,
-
               grantId,
 
               userId:

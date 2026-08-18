@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { requireAdminAuth } = require('../auth/auth.middleware')
-const { requirePermissions } = require('../access/access.middleware');
 const { getReportHandler, getReportsHandler, updateStatusHandler, updatePriorityHandler, assignReportHandler , unassignReportHandler } = require('./admin.controller');
 const { listMessagesHandler, createMessageHandler } = require('../adminReportMessages/adminReportMessages.controller');
 const { listInternalNotesHandler, createInternalNoteHandler } = require('../adminReportsInternalNotes/adminReportInternalNotes.controller');
@@ -9,36 +8,36 @@ const { getIdentityHandler } = require('../adminReportIdentity/adminReportIdenti
 const { listRestrictionsHandler,createRestrictionHandler,revokeRestrictionHandler, } = require('../adminReportRestrictions/adminReportRestrictions.controller');
 const { requireReportAccess } = require('../reports/reportAccess.middleware');
 const { listAccessGrantsHandler, createAccessGrantHandler, revokeAccessGrantHandler } = require('../adminReportAccessGrants/adminReportAccessGrants.controller');
-const { requireReportCapability, } = require("../access/reportCapability.middleware");
+const { requireReportCapability, requireReportStatusCapability, } = require("../access/reportCapability.middleware");
 const { uploadAttachment, } = require("../adminReportAttachments/adminReportAttachments.upload");
-const { listAttachmentsHandler,createAttachmentHandler, } = require("../adminReportAttachments/adminReportAttachments.controller");
+const { listAttachmentsHandler,createAttachmentHandler, downloadAttachmentHandler } = require("../adminReportAttachments/adminReportAttachments.controller");
 
 router.use(requireAdminAuth);
-router.use(requirePermissions('REPORT_VIEW'));
 router.param('id', requireReportAccess);
 
 router.get('/', getReportsHandler);
 router.get('/:id',requireReportCapability({permission:"REPORT_VIEW", scope:"VIEW",}), getReportHandler);
 router.get('/:id/messages', requireReportCapability({permission:"REPORT_MESSAGE",scope:"MESSAGE",}), listMessagesHandler);
 router.get('/:id/internal-notes', requireReportCapability({permission:"REPORT_INTERNAL_NOTE",scope:"INVESTIGATE",}), listInternalNotesHandler);
-router.get('/:id/identity', requirePermissions('REPORT_IDENTITY_VIEW'), getIdentityHandler);
-router.get('/:id/restrictions', requirePermissions('REPORT_RESTRICTION_MANAGE'), listRestrictionsHandler);
-router.get('/:id/access-grants',requirePermissions('REPORT_ACCESS_GRANT_MANAGE'),listAccessGrantsHandler);
+router.get('/:id/identity', requireReportCapability({permission:"REPORT_IDENTITY_VIEW",scope:"INVESTIGATE",}), getIdentityHandler);
+router.get('/:id/restrictions', requireReportCapability({permission:"REPORT_RESTRICT_USER",scope:"MANAGE",}), listRestrictionsHandler);
+router.get('/:id/access-grants',requireReportCapability({permission:"REPORT_MANAGE_ACCESS",scope:"MANAGE",}),listAccessGrantsHandler);
 router.get("/:id/attachments",requireReportCapability({permission:"REPORT_ATTACHMENT",scope:"INVESTIGATE",}),listAttachmentsHandler);
+router.get("/:id/attachments/:attachmentId/download", requireReportCapability({permission:"REPORT_ATTACHMENT",scope:"INVESTIGATE",}), downloadAttachmentHandler);
 
 router.post('/:id/messages', requireReportCapability({permission:"REPORT_MESSAGE",scope:"MESSAGE",}), createMessageHandler);
 router.post('/:id/internal-notes', requireReportCapability({permission:"REPORT_INTERNAL_NOTE",scope:"INVESTIGATE",}), createInternalNoteHandler);
-router.post('/:id/restrictions', requirePermissions('REPORT_RESTRICTION_MANAGE'), createRestrictionHandler);
-router.post('/:id/access-grants',requirePermissions('REPORT_ACCESS_GRANT_MANAGE'),createAccessGrantHandler);
+router.post('/:id/restrictions', requireReportCapability({permission:"REPORT_RESTRICT_USER",scope:"MANAGE",}), createRestrictionHandler);
+router.post('/:id/access-grants',requireReportCapability({permission:"REPORT_MANAGE_ACCESS",scope:"MANAGE",}),createAccessGrantHandler);
 router.post("/:id/attachments",requireReportCapability({permission:"REPORT_ATTACHMENT",scope:"INVESTIGATE",}),uploadAttachment,createAttachmentHandler);
 
-router.patch('/:id/status', requireReportCapability({permission:"REPORT_MANAGE",scope:"MANAGE",}), updateStatusHandler);
-router.patch('/:id/priority', requireReportCapability({permission:"REPORT_MANAGE",scope:"MANAGE",}), updatePriorityHandler);
+router.patch('/:id/status', requireReportStatusCapability, updateStatusHandler);
+router.patch('/:id/priority', requireReportCapability({permission:"REPORT_CHANGE_PRIORITY",scope:"MANAGE",}), updatePriorityHandler);
 
-router.put('/:id/assignment', requireReportCapability({permission:"REPORT_MANAGE",scope:"MANAGE",}), assignReportHandler);
+router.put('/:id/assignment', requireReportCapability({permission:"REPORT_ASSIGN",scope:"MANAGE",}), assignReportHandler);
 
-router.delete('/:id/assignment', requireReportCapability({permission:"REPORT_MANAGE",scope:"MANAGE",}), unassignReportHandler);
-router.delete('/:id/restrictions/:userId', requirePermissions('REPORT_RESTRICTION_MANAGE'), revokeRestrictionHandler);
-router.delete('/:id/access-grants/:grantId',requirePermissions('REPORT_ACCESS_GRANT_MANAGE'),revokeAccessGrantHandler);
+router.delete('/:id/assignment', requireReportCapability({permission:"REPORT_ASSIGN",scope:"MANAGE",}), unassignReportHandler);
+router.delete('/:id/restrictions/:userId', requireReportCapability({permission:"REPORT_RESTRICT_USER",scope:"MANAGE",}), revokeRestrictionHandler);
+router.delete('/:id/access-grants/:grantId',requireReportCapability({permission:"REPORT_MANAGE_ACCESS",scope:"MANAGE",}),revokeAccessGrantHandler);
 
 module.exports = router;

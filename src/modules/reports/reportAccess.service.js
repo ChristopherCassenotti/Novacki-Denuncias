@@ -123,37 +123,8 @@ async function authenticateReporter({protocol, accessSecret}) {
     const now = new Date();
 
     if(credential.locked_until && credential.locked_until > now){
-        throw createServiceError('O acesso será temporariamente bloquado. Tente novamente mais tarde.', 429);
+        throw createServiceError('O acesso está temporariamente bloqueado. Tente novamente mais tarde.', 429);
     }
-const calculatedHash =
-  hashReportAccessSecret(
-    accessSecret
-  );
-
-console.log("REPORT ACCESS DEBUG:", {
-  protocol: report.protocol,
-
-  receivedSecretLength:
-    accessSecret.length,
-
-  storedHashType:
-    typeof credential.secret_hash,
-
-  storedHashLength:
-    credential.secret_hash?.length,
-
-  storedHashHasPrefix:
-    credential.secret_hash?.startsWith(
-      "sha256:"
-    ),
-
-  calculatedHashLength:
-    calculatedHash.length,
-
-  directHashMatch:
-    calculatedHash ===
-    credential.secret_hash,
-});
     const secretIsValid = verifyReportAccessSecret(accessSecret, credential.secret_hash);
 
     if(!secretIsValid){

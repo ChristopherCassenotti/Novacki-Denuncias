@@ -8,7 +8,7 @@ async function requireReporterAuth(req, res, next) {
 
         if(!token){
             return res.status(401).json({
-                message: 'Autentificação da denúncia necessária.'
+                message: 'Autenticação da denúncia necessária.'
             });
         }
 

@@ -23,7 +23,6 @@ async function getReportIdentity(reportId, actorUserId) {
 
       select: {
         id: true,
-        protocol: true,
         mode: true,
       },
     });
@@ -83,7 +82,6 @@ async function getReportIdentity(reportId, actorUserId) {
       request_id: randomUUID(),
       metadata_json:
         auditMetadata({
-          protocol: report.protocol,
           identityId: identity.id,
         }),
     },

@@ -32,7 +32,7 @@ async function getMessagesHandler(req, res) {
         });
     }
     catch(error){
-        return sendError(res, error, 'Não foi possível carregar as menssagens.');
+        return sendError(res, error, 'Não foi possível carregar as mensagens.');
     }
 }
 
@@ -50,7 +50,7 @@ async function createMessageHandler(req, res) {
         const message = await createReporterMessage(req.reporterAuth.reportId, validation.data.body);
 
         return res.status(201).json({
-            message: 'Messagem enviada com sucesso.',
+            message: 'Mensagem enviada com sucesso.',
 
             data:{
                 message,

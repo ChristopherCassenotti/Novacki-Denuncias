@@ -1,26 +1,22 @@
 const {
-    reportIdParamSchema,
-} = require(
-    "../adminReports/adminReports.schema"
-);
-
-const {
-    listAttachments,
-    createAttachment,
-    prepareAttachmentDownload,
-} = require(
-    "./adminReportAttachments.service"
-);
-const {
     pipeline,
 } = require(
     "node:stream/promises"
 );
 
 const {
-    attachmentParamSchema,
+    attachmentIdParamSchema,
+    uploadAttachmentBodySchema,
 } = require(
-    "./adminReportAttachments.schema"
+    "./publicReportAttachments.schema"
+);
+
+const {
+    listReporterAttachments,
+    createReporterAttachment,
+    prepareReporterAttachmentDownload,
+} = require(
+    "./publicReportAttachments.service"
 );
 
 function sendError(
@@ -54,106 +50,7 @@ function sendError(
     });
 }
 
-async function listAttachmentsHandler(
-    req,
-    res
-) {
-    const params =
-        reportIdParamSchema.safeParse(
-            req.params
-        );
-
-    if (!params.success) {
-        return res.status(400).json({
-            message:
-                "ID da denúncia inválido.",
-        });
-    }
-
-    try {
-        const attachments =
-            await listAttachments(
-                params.data.id
-            );
-
-        return res.status(200).json({
-            data: {
-                attachments,
-            },
-        });
-    } catch (error) {
-        return sendError(
-            res,
-            error,
-            "Não foi possível carregar os anexos."
-        );
-    }
-}
-
-async function createAttachmentHandler(
-    req,
-    res
-) {
-    const params =
-        reportIdParamSchema.safeParse(
-            req.params
-        );
-
-    if (!params.success) {
-        return res.status(400).json({
-            message:
-                "ID da denúncia inválido.",
-        });
-    }
-
-    const visibility =
-        req.body?.visibility ||
-        "ADMIN_ONLY";
-
-    if (
-        ![
-            "ADMIN_ONLY",
-            "REPORTER_AND_ADMIN",
-        ].includes(
-            visibility
-        )
-    ) {
-        return res.status(400).json({
-            message:
-                "Visibilidade inválida.",
-        });
-    }
-
-    try {
-        const attachment =
-            await createAttachment(
-                params.data.id,
-                {
-                    file:
-                        req.file,
-
-                    visibility,
-                },
-                req.auth.userId
-            );
-
-        return res.status(201).json({
-            message:
-                "Anexo adicionado com sucesso.",
-
-            data: {
-                attachment,
-            },
-        });
-    } catch (error) {
-        return sendError(
-            res,
-            error,
-            "Não foi possível adicionar o anexo."
-        );
-    }
-}
-function sanitizeDownloadFilename(
+function sanitizeFilename(
     filename
 ) {
     return String(
@@ -173,56 +70,139 @@ function sanitizeDownloadFilename(
         );
 }
 
-function buildContentDisposition(
+function contentDisposition(
     filename
 ) {
-    const safeFilename =
-        sanitizeDownloadFilename(
+    const safe =
+        sanitizeFilename(
             filename
         );
 
-    const asciiFallback =
-        safeFilename.replace(
+    const ascii =
+        safe.replace(
             /[^\x20-\x7E]/g,
             "_"
         );
 
-    const encoded =
-        encodeURIComponent(
-            safeFilename
-        );
-
     return (
         `attachment; ` +
-        `filename="${asciiFallback}"; ` +
-        `filename*=UTF-8''${encoded}`
+        `filename="${ascii}"; ` +
+        `filename*=UTF-8''${encodeURIComponent(
+            safe
+        )}`
     );
 }
 
-async function downloadAttachmentHandler(
+async function listReporterAttachmentsHandler(
     req,
     res
 ) {
-    const params =
-        attachmentParamSchema.safeParse(
-            req.params
-        );
+    try {
+        const reportId =
+            req.reporterAuth.reportId;
 
-    if (!params.success) {
+        const attachments =
+            await listReporterAttachments(
+                reportId
+            );
+
+        return res.status(200).json({
+            data: {
+                attachments,
+            },
+        });
+    } catch (error) {
+        return sendError(
+            res,
+            error,
+            "Não foi possível carregar os anexos."
+        );
+    }
+}
+
+async function createReporterAttachmentHandler(
+    req,
+    res
+) {
+    /*
+     * Multipart manda strings.
+     */
+    const validation =
+        uploadAttachmentBodySchema.safeParse({
+            messageId:
+                req.body?.messageId ||
+                null,
+        });
+
+    if (!validation.success) {
         return res.status(400).json({
             message:
-                "Parâmetros inválidos.",
+                "Dados do anexo inválidos.",
         });
     }
 
     try {
-        const download =
-            await prepareAttachmentDownload(
-                params.data.id,
-                params.data.attachmentId,
-                req.auth.userId
+        const reportId =
+            req.reporterAuth.reportId;
+
+        const attachment =
+            await createReporterAttachment(
+                reportId,
+                {
+                    file:
+                        req.file,
+
+                    messageId:
+                        validation
+                            .data
+                            .messageId,
+                }
             );
 
+        return res.status(201).json({
+            message:
+                "Anexo enviado com sucesso.",
+
+            data: {
+                attachment,
+            },
+        });
+    } catch (error) {
+        return sendError(
+            res,
+            error,
+            "Não foi possível enviar o anexo."
+        );
+    }
+}
+
+async function downloadReporterAttachmentHandler(
+    req,
+    res
+) {
+    const validation =
+        attachmentIdParamSchema.safeParse(
+            req.params
+        );
+
+    if (!validation.success) {
+        return res.status(400).json({
+            message:
+                "ID do anexo inválido.",
+        });
+    }
+
+    try {
+        const reportId =
+            req.reporterAuth.reportId;
+
+        const download =
+            await prepareReporterAttachmentDownload(
+                reportId,
+                validation
+                    .data
+                    .attachmentId
+            );
 
         res.setHeader(
             "Cache-Control",
@@ -254,7 +234,7 @@ async function downloadAttachmentHandler(
 
         res.setHeader(
             "Content-Disposition",
-            buildContentDisposition(
+            contentDisposition(
                 download.originalName
             )
         );
@@ -264,7 +244,6 @@ async function downloadAttachmentHandler(
             res
         );
     } catch (error) {
-
         if (
             !res.headersSent
         ) {
@@ -275,7 +254,6 @@ async function downloadAttachmentHandler(
             );
         }
 
-
         console.error(
             "Erro durante streaming do anexo:",
             error
@@ -284,8 +262,9 @@ async function downloadAttachmentHandler(
         return res.destroy();
     }
 }
+
 module.exports = {
-    listAttachmentsHandler,
-    createAttachmentHandler,
-    downloadAttachmentHandler,
+    listReporterAttachmentsHandler,
+    createReporterAttachmentHandler,
+    downloadReporterAttachmentHandler,
 };

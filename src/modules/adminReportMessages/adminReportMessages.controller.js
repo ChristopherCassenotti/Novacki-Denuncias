@@ -57,7 +57,7 @@ async function createMessageHandler(req, res) {
 
     if(!body.success){
         return res.status(400).json({
-            message: 'Messagem inválida.',
+            message: 'Mensagem inválida.',
             errors: formatValidantionErrors(body.error),
         });
     }

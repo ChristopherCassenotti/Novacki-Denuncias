@@ -55,6 +55,29 @@ function requireReportCapability({
   };
 }
 
+function getReportStatusPermission(status) {
+  if (status === "CONCLUDED") {
+    return "REPORT_CONCLUDE";
+  }
+
+  if (status === "ARCHIVED") {
+    return "REPORT_ARCHIVE";
+  }
+
+  return "REPORT_CHANGE_STATUS";
+}
+
+function requireReportStatusCapability(req, res, next) {
+  const permission = getReportStatusPermission(req.body?.status);
+
+  return requireReportCapability({
+    permission,
+    scope: "MANAGE",
+  })(req, res, next);
+}
+
 module.exports = {
+  getReportStatusPermission,
   requireReportCapability,
+  requireReportStatusCapability,
 };

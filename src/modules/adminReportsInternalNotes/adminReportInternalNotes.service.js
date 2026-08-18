@@ -23,7 +23,6 @@ async function findReportOrFail(database, reportId) {
 
       select: {
         id: true,
-        protocol: true,
         status: true,
       },
     });
@@ -220,8 +219,6 @@ async function createInternalNote( reportId, { body, }, actorUserId) {
           request_id: randomUUID(),
           metadata_json:
             auditMetadata({
-              protocol: report.protocol,
-
               noteId,
             }),
         },

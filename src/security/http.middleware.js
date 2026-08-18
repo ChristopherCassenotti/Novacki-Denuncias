@@ -109,6 +109,28 @@ function errorHandler(error, req, res, next) {
     });
   }
 
+  if (error?.name === "MulterError") {
+    const fileTooLarge = error.code === "LIMIT_FILE_SIZE";
+
+    return res.status(fileTooLarge ? 413 : 400).json({
+      message: fileTooLarge
+        ? "Arquivo muito grande."
+        : "Upload de arquivo inválido.",
+    });
+  }
+
+  if (
+    Number.isInteger(error?.statusCode) &&
+    error.statusCode >= 400 &&
+    error.statusCode <= 599
+  ) {
+    return res.status(error.statusCode).json({
+      message:
+        error.message ||
+        "Não foi possível processar a requisição.",
+    });
+  }
+
   console.error("Erro não tratado na API:", error);
 
   return res.status(500).json({

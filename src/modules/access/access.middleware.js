@@ -5,7 +5,7 @@ function requirePermissions(...requiredPermissions){
         try{
             if(!req.auth?.userId){
                 return res.status(401).json({
-                    message: "Autenficação necessária"
+                    message: "Autenticação necessária."
                 });
             }
             

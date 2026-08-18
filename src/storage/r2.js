@@ -12,16 +12,6 @@ const R2_SECRET_ACCESS_KEY =
 const R2_BUCKET_NAME =
     process.env.R2_BUCKET_NAME?.trim();
 
-const endpoint =
-    `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
-
-console.log("R2 CONFIG:", {
-    endpoint,
-    bucket: R2_BUCKET_NAME,
-    accountIdLength:
-        R2_ACCOUNT_ID?.length,
-});
-
 if (
     !R2_ACCOUNT_ID ||
     !R2_ACCESS_KEY_ID ||

@@ -1,6 +1,7 @@
 const prisma = require('../../database/prisma');
 const { decryptJson, encryptJson } = require('../../security/crypto.service');
 const { randomUUID } = require('node:crypto');
+const { getReportListAccess } = require('../access/reportCapability.service');
 
 function createServiceError(message, statusCode){
     const error = new Error(message);
@@ -318,9 +319,9 @@ async function getAdminReport(reportId) {
         id: report.id,
         protocol: report.protocol,
         mode: report.mode,
-        relationship_type: report.relationship_type,
-        category: report.category,
-        unit: report.unit,
+        relationshipType: report.relationship_type,
+        category: reportWithReferences.category,
+        unit: reportWithReferences.unit,
         immediateRisk: report.immediate_risk,
         priority: report.priority,
         status: report.status,
@@ -333,7 +334,7 @@ async function getAdminReport(reportId) {
         lastActivityAt: report.last_activity_at,
         concludedAt: report.concluded_at,
         archivedAt: report.archived_at,
-        retentionUntiol: report.retention_until,
+        retentionUntil: report.retention_until,
         legalHold: report.legal_hold,
         createdAt: report.created_at,
         updatedAt: report.updated_at,
@@ -351,7 +352,6 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
 
             select:{
                 id: true,
-                protocol: true,
                 status: true,
                 status_version: true,
                 concluded_at: true,
@@ -360,7 +360,7 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
         });
 
         if(!current){
-            throw createServiceError('Denúncia não encotrada.', 404);
+            throw createServiceError('Denúncia não encontrada.', 404);
         }
 
         if(current.status_version !== expectedVersion){
@@ -443,7 +443,6 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
                 success: true,
                 request_id: randomUUID(),
                 metadata_json: auditMetadata({
-                    protocol: current.protocol,
                     previousStatus: current.status,
                     newStatus: status,
                 }),
@@ -465,7 +464,6 @@ async function updateReportPriority(reportId, {priority}, actorUserId) {
 
             select:{
                 id: true,
-                protocol: true,
                 priority: true,
                 status: true,
             },
@@ -526,7 +524,6 @@ async function updateReportPriority(reportId, {priority}, actorUserId) {
                 success: true,
                 request_id: randomUUID(),
                 metadata_json: auditMetadata({
-                    protocol: current.protocol,
                     previousPriority: current.priority,
                     newPriority: priority,
                 }),
@@ -558,7 +555,6 @@ async function assignReport(
 
           select: {
             id: true,
-            protocol: true,
             status: true,
 
             current_assignee_user_id:
@@ -835,9 +831,6 @@ async function assignReport(
 
           metadata_json:
             auditMetadata({
-              protocol:
-                report.protocol,
-
               targetType,
               targetId,
             }),
@@ -862,7 +855,6 @@ async function unassignReport(reportId, actorUserId) {
 
             select:{
                 id: true,
-                protocol: true,
                 status: true,
                 current_assignee_user_id: true,
                 current_assignee_team_id: true,
@@ -870,11 +862,11 @@ async function unassignReport(reportId, actorUserId) {
         });
 
         if(!report){
-            throw createServiceError('Denúncia não encotrada.', 404);
+            throw createServiceError('Denúncia não encontrada.', 404);
         }
 
         if(!report.current_assignee_user_id && !report.current_assignee_team_id){
-            throw createServiceError('A denúncia não possui resposável atribuído.', 409);
+            throw createServiceError('A denúncia não possui responsável atribuído.', 409);
         }
 
         await tx.report_assignments.updateMany({
@@ -918,9 +910,7 @@ async function unassignReport(reportId, actorUserId) {
                 entity_id: reportId,
                 success: true,
                 request_id: randomUUID(),
-                metadata_json: auditMetadata({
-                    protocol: report.protocol,
-                }),
+                metadata_json: null,
             },
         });
     });

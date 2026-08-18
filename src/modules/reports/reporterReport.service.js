@@ -25,7 +25,7 @@ async function getReporterReport(reportId) {
     });
 
     if(!report){
-        throw createServiceError('Denúncia não encotrada.', 404);
+        throw createServiceError('Denúncia não encontrada.', 404);
     }
 
     return {
@@ -34,7 +34,7 @@ async function getReporterReport(reportId) {
         createdAt: report.created_at,
         lastActivityAt: report.last_activity_at,
         concludedAt: report.concluded_at,
-        archived_at: report.archived_at,
+        archivedAt: report.archived_at,
     };
 }
 

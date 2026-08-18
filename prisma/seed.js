@@ -67,6 +67,10 @@ const permissionsData = [
     description: "Adicionar e consultar anexos permitidos.",
   },
   {
+    code: "REPORT_IDENTITY_VIEW",
+    description: "Consultar a identidade do denunciante quando autorizada.",
+  },
+  {
     code: "REPORT_MANAGE_ACCESS",
     description: "Gerenciar acessos específicos a denúncias.",
   },
@@ -183,6 +187,7 @@ const rolePermissions = {
     "REPORT_MESSAGE",
     "REPORT_REQUEST_INFO",
     "REPORT_ATTACHMENT",
+    "REPORT_IDENTITY_VIEW",
     "REPORT_MANAGE_ACCESS",
     "REPORT_RESTRICT_USER",
     "REPORT_ARCHIVE",

@@ -28,7 +28,35 @@ const allowedMimeTypes =
         "video/webm",
     ]);
 
-const upload =
+function fileFilter(
+    req,
+    file,
+    callback
+) {
+    if (
+        !allowedMimeTypes.has(
+            file.mimetype
+        )
+    ) {
+        const error =
+            new Error(
+                "Tipo de arquivo não permitido."
+            );
+
+        error.statusCode = 400;
+
+        return callback(
+            error
+        );
+    }
+
+    return callback(
+        null,
+        true
+    );
+}
+
+const singleUpload =
     multer({
         storage:
             multer.memoryStorage(),
@@ -41,37 +69,34 @@ const upload =
                 1,
         },
 
-        fileFilter(
-            req,
-            file,
-            callback
-        ) {
-            if (
-                !allowedMimeTypes.has(
-                    file.mimetype
-                )
-            ) {
-                const error =
-                    new Error(
-                        "Tipo de arquivo não permitido."
-                    );
+        fileFilter,
+    });
 
-                error.statusCode =
-                    400;
+const multipleUpload =
+    multer({
+        storage:
+            multer.memoryStorage(),
 
-                return callback(
-                    error
-                );
-            }
+        limits: {
+            fileSize:
+                MAX_FILE_SIZE,
 
-            return callback(
-                null,
-                true
-            );
+            files:
+                5,
         },
+
+        fileFilter,
     });
 
 module.exports = {
     uploadAttachment:
-        upload.single("file"),
+        singleUpload.single(
+            "file"
+        ),
+
+    uploadInitialAttachments:
+        multipleUpload.array(
+            "files",
+            5
+        ),
 };

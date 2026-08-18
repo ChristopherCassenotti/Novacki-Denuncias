@@ -193,6 +193,7 @@ async function createPublicReport(data) {
             });
             
             return {
+                reportId: report.id,
                 protocol: report.protocol,
                 accessSecret,
                 createdAt: report.created_at,

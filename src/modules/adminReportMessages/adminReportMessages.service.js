@@ -3,7 +3,7 @@ const prisma = require('../../database/prisma');
 const { encryptJson, decryptJson } = require('../../security/crypto.service');
 
 function createServiceError(message, statusCode){
-    const error = new Error();
+    const error = new Error(message);
     error.statusCode = statusCode;
 
     return error;
@@ -21,13 +21,12 @@ async function findReportOrFail(database, reportId) {
 
         select: {
             id: true,
-            protocol: true,
             status: true,
         },
     });
 
     if(!report){
-        throw createServiceError('Denúncia não encotrada.', 404);
+        throw createServiceError('Denúncia não encontrada.', 404);
     }
 
     return report;
@@ -237,7 +236,6 @@ async function createAdminMessage(reportId, {type, body}, actorUserId) {
                 success: true,
                 request_id: randomUUID(),
                 metadata_json: auditMetadata({
-                    protocol: report.protocol,
                     messageId,
                     messageType: type,
                 }),

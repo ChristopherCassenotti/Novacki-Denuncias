@@ -8,13 +8,10 @@ const usersRoutes = require('./modules/users/users.routes');
 const teamsRoutes = require('./modules/teams/temas.routes');
 const publicRoutes = require('./modules/public/public.routes');
 const adminReportsRoutes = require('./modules/adminReports/admin.routes');
+const adminDashboardRoutes = require('./modules/adminDashboard/adminDashboard.routes');
+const adminAuditLogsRoutes = require('./modules/adminAuditLogs/adminAuditLogs.routes');
 const { apiRateLimiter } = require('./modules/auth/auth.rateLimit');
-const {
-  errorHandler,
-  notFoundHandler,
-  requireTrustedOrigin,
-  securityHeaders,
-} = require('./security/http.middleware');
+const { errorHandler,notFoundHandler,requireTrustedOrigin,securityHeaders,} = require('./security/http.middleware');
 
 const app = express();
 
@@ -39,6 +36,8 @@ app.use('/api/admin/permissions', permissionsRoutes);
 app.use('/api/admin/users', usersRoutes);
 app.use('/api/admin/teams', teamsRoutes);
 app.use('/api/admin/reports', adminReportsRoutes);
+app.use('/api/admin/dashboard', adminDashboardRoutes);
+app.use('/api/admin/audit-logs', adminAuditLogsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

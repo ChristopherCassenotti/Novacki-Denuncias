@@ -16,6 +16,7 @@ const {
 const {
     uploadObject,
     deleteObject,
+    getObject,
 } = require(
     "../../storage/r2"
 );
@@ -54,7 +55,6 @@ async function findReportOrFail(
 
             select: {
                 id: true,
-                protocol: true,
                 status: true,
             },
         });
@@ -375,9 +375,6 @@ async function createAttachment(
 
                         metadata_json:
                             auditMetadata({
-                                protocol:
-                                    report.protocol,
-
                                 attachmentId,
 
                                 mimeType:
@@ -427,7 +424,210 @@ async function createAttachment(
     );
 }
 
+async function prepareAttachmentDownload(
+    reportId,
+    attachmentId,
+    actorUserId
+) {
+    const report =
+        await findReportOrFail(
+            prisma,
+            reportId
+        );
+
+    const attachment =
+        await prisma.report_attachments.findFirst({
+            where: {
+                id:
+                    attachmentId,
+
+                report_id:
+                    reportId,
+
+                purged_at:
+                    null,
+            },
+
+            select: {
+                id: true,
+                report_id: true,
+
+                storage_key: true,
+
+                mime_type: true,
+                size_bytes: true,
+
+                original_name_ciphertext:
+                    true,
+
+                original_name_iv:
+                    true,
+
+                original_name_auth_tag:
+                    true,
+
+                original_name_key_version:
+                    true,
+
+                scan_status:
+                    true,
+
+                available_at:
+                    true,
+
+                quarantined_at:
+                    true,
+
+                purged_at:
+                    true,
+            },
+        });
+
+    if (!attachment) {
+        throw createServiceError(
+            "Anexo não encontrado.",
+            404
+        );
+    }
+
+    /*
+     * O arquivo só pode ser entregue
+     * quando o scanner tiver marcado
+     * explicitamente como CLEAN.
+     */
+    if (
+        attachment.scan_status ===
+        "PENDING"
+    ) {
+        throw createServiceError(
+            "Este arquivo ainda está sendo analisado.",
+            409
+        );
+    }
+
+    if (
+        attachment.scan_status ===
+        "FAILED"
+    ) {
+        throw createServiceError(
+            "Não foi possível validar a segurança deste arquivo.",
+            409
+        );
+    }
+
+    if (
+        attachment.scan_status ===
+            "INFECTED" ||
+        attachment.scan_status ===
+            "QUARANTINED"
+    ) {
+        throw createServiceError(
+            "Este arquivo está indisponível por motivos de segurança.",
+            423
+        );
+    }
+
+    if (
+        attachment.scan_status !==
+        "CLEAN"
+    ) {
+        throw createServiceError(
+            "Este arquivo não está disponível para download.",
+            409
+        );
+    }
+
+    /*
+     * CLEAN sem available_at indicaria
+     * inconsistência de estado.
+     */
+    if (
+        !attachment.available_at
+    ) {
+        throw createServiceError(
+            "Este arquivo ainda não está disponível.",
+            409
+        );
+    }
+
+    let object;
+
+    try {
+        object =
+            await getObject(
+                attachment.storage_key
+            );
+    } catch (error) {
+        console.error(
+            "Erro ao buscar arquivo no R2:",
+            error
+        );
+
+        throw createServiceError(
+            "O arquivo está temporariamente indisponível.",
+            502
+        );
+    }
+
+    if (!object?.Body) {
+        throw createServiceError(
+            "O arquivo está temporariamente indisponível.",
+            502
+        );
+    }
+
+    const originalName =
+        decryptOriginalName(
+            attachment
+        );
+
+    await prisma.audit_logs.create({
+        data: {
+            actor_type:
+                "ADMIN",
+
+            actor_user_id:
+                actorUserId,
+
+            action:
+                "REPORT_ATTACHMENT_DOWNLOADED",
+
+            entity_type:
+                "REPORT",
+
+            entity_id:
+                reportId,
+
+            success:
+                true,
+
+            request_id:
+                randomUUID(),
+
+            metadata_json:
+                auditMetadata({
+                    attachmentId:
+                        attachment.id,
+                }),
+        },
+    });
+
+    return {
+        body:
+            object.Body,
+
+        originalName,
+
+        mimeType:
+            attachment.mime_type,
+
+        sizeBytes:
+            attachment.size_bytes,
+    };
+}
+
 module.exports = {
     listAttachments,
     createAttachment,
+    prepareAttachmentDownload,
 };

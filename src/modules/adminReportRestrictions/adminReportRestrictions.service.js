@@ -23,7 +23,6 @@ async function findReportOrFail(database, reportId) {
 
       select: {
         id: true,
-        protocol: true,
       },
     });
 
@@ -350,8 +349,6 @@ async function createRestriction(reportId, {userId, reason, notes,}, actorUserId
           request_id: randomUUID(),
           metadata_json:
             auditMetadata({
-              protocol: report.protocol,
-
               restrictedUserId: userId,
 
               reason,
@@ -418,8 +415,6 @@ async function revokeRestriction(reportId, userId, actorUserId) {
           request_id: randomUUID(),
           metadata_json:
             auditMetadata({
-              protocol: report.protocol,
-
               userId,
             }),
         },
