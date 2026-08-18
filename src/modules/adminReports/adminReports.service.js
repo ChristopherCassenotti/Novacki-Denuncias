@@ -2,6 +2,7 @@ const prisma = require('../../database/prisma');
 const { decryptJson, encryptJson } = require('../../security/crypto.service');
 const { randomUUID } = require('node:crypto');
 const { getReportListAccess } = require('../access/reportCapability.service');
+const {scheduleRetentionForReport,cancelPendingRetentionForReport,} = require("../retentionScheduler/retentionScheduler.service");
 
 function createServiceError(message, statusCode){
     const error = new Error(message);
@@ -449,7 +450,29 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
             },
         });
     });
-
+    try {
+        if (
+            [
+                "CONCLUDED",
+                "ARCHIVED",
+            ].includes(status)
+        ) {
+            await scheduleRetentionForReport(
+                reportId
+            );
+        } else {
+            await cancelPendingRetentionForReport(
+                reportId,
+                actorUserId,
+                "REPORT_STATUS_NOT_ELIGIBLE"
+            );
+        }
+    } catch (error) {
+        console.error(
+            "Falha ao atualizar a retenção após mudança de status:",
+            error
+        );
+    }
     return getAdminReport(reportId);
 }
 

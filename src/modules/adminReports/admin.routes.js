@@ -11,6 +11,15 @@ const { listAccessGrantsHandler, createAccessGrantHandler, revokeAccessGrantHand
 const { requireReportCapability, requireReportStatusCapability, } = require("../access/reportCapability.middleware");
 const { uploadAttachment, } = require("../adminReportAttachments/adminReportAttachments.upload");
 const { listAttachmentsHandler,createAttachmentHandler, downloadAttachmentHandler } = require("../adminReportAttachments/adminReportAttachments.controller");
+const {
+    getLegalHoldHandler,
+    applyLegalHoldHandler,
+    releaseLegalHoldHandler,
+} = require(
+    "../adminReportLegalHold/adminReportLegalHold.controller"
+);
+const { requirePermissions } = require('../access/access.middleware');
+
 
 router.use(requireAdminAuth);
 router.param('id', requireReportAccess);
@@ -39,5 +48,29 @@ router.put('/:id/assignment', requireReportCapability({permission:"REPORT_ASSIGN
 router.delete('/:id/assignment', requireReportCapability({permission:"REPORT_ASSIGN",scope:"MANAGE",}), unassignReportHandler);
 router.delete('/:id/restrictions/:userId', requireReportCapability({permission:"REPORT_RESTRICT_USER",scope:"MANAGE",}), revokeRestrictionHandler);
 router.delete('/:id/access-grants/:grantId',requireReportCapability({permission:"REPORT_MANAGE_ACCESS",scope:"MANAGE",}),revokeAccessGrantHandler);
+
+router.get(
+    "/:id/legal-hold",
+    requirePermissions(
+        "REPORT_LEGAL_HOLD_MANAGE"
+    ),
+    getLegalHoldHandler
+);
+
+router.post(
+    "/:id/legal-hold",
+    requirePermissions(
+        "REPORT_LEGAL_HOLD_MANAGE"
+    ),
+    applyLegalHoldHandler
+);
+
+router.post(
+    "/:id/legal-hold/release",
+    requirePermissions(
+        "REPORT_LEGAL_HOLD_MANAGE"
+    ),
+    releaseLegalHoldHandler
+);
 
 module.exports = router;

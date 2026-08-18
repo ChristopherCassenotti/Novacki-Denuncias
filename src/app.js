@@ -10,6 +10,8 @@ const publicRoutes = require('./modules/public/public.routes');
 const adminReportsRoutes = require('./modules/adminReports/admin.routes');
 const adminDashboardRoutes = require('./modules/adminDashboard/adminDashboard.routes');
 const adminAuditLogsRoutes = require('./modules/adminAuditLogs/adminAuditLogs.routes');
+const retentionPoliciesRoutes = require('./modules/retentionPolicies/retentionPolicies.routes');
+const retentionSchedulerRoutes = require('./modules/retentionScheduler/retentionScheduler.routes');
 const { apiRateLimiter } = require('./modules/auth/auth.rateLimit');
 const { errorHandler,notFoundHandler,requireTrustedOrigin,securityHeaders,} = require('./security/http.middleware');
 
@@ -37,7 +39,8 @@ app.use('/api/admin/users', usersRoutes);
 app.use('/api/admin/teams', teamsRoutes);
 app.use('/api/admin/reports', adminReportsRoutes);
 app.use('/api/admin/dashboard', adminDashboardRoutes);
-app.use('/api/admin/audit-logs', adminAuditLogsRoutes);
+app.use('/api/admin/retention-policies', retentionPoliciesRoutes);
+app.use("/api/admin/retention-scheduler", retentionSchedulerRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
