@@ -3,17 +3,18 @@ const router = express.Router();
 const {login, changePassword, completeCredentialSetup, me, logout} = require('./auth.controller');
 const { requirePreAuth } = require('./preAuth.middleware');
 const { requireAdminAuth } = require('./auth.middleware');
+const { requireTrustedOrigin } = require('../../middlewares/originProtection.middleware');
 const {
   credentialActionRateLimiter,
-  loginRateLimiter,
-} = require('./auth.rateLimit');
+  adminLoginLimiter,
+} = require('../../middlewares/security.middlewares');
 
 //GET
 router.get('/me', requireAdminAuth, me);
 
 
 //POST
-router.post('/login', loginRateLimiter, login);
+router.post('/login', adminLoginLimiter, login);
 router.post(
   '/complete-credential-setup',
   credentialActionRateLimiter,
@@ -25,7 +26,7 @@ router.post(
   requirePreAuth("CHANGE_PASSWORD"),
   changePassword
 );
-router.post('/logout', requireAdminAuth, logout);
+router.post('/logout', requireAdminAuth, requireTrustedOrigin, logout);
 
 
 module.exports = router;

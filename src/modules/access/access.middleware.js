@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { getUserAccessContext } = require('./access.service');
 
 function requirePermissions(...requiredPermissions){
@@ -27,7 +28,7 @@ function requirePermissions(...requiredPermissions){
             return next();
         }
         catch(error){
-            console.error("Erro ao verificar permissões:", error.message);
+            safeExceptionLog("admin_permission_validation", error);
 
             return res.status(500).json({message: "Não foi possível verificar as permissões do usuário."});
         };

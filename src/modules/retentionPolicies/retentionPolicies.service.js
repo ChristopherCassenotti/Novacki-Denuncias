@@ -22,6 +22,48 @@ function createServiceError(
     return error;
 }
 
+function isTransactionConflict(error) {
+    return [
+        "P2034",
+        "ER_LOCK_DEADLOCK",
+        "ER_LOCK_WAIT_TIMEOUT",
+        "1213",
+        "1205",
+    ].includes(
+        String(
+            error?.code ||
+            error?.cause?.code ||
+            ""
+        )
+    );
+}
+
+async function runPolicyTransaction(
+    operation
+) {
+    try {
+        return await prisma.$transaction(
+            operation,
+            {
+                isolationLevel:
+                    "Serializable",
+
+                maxWait: 5_000,
+                timeout: 15_000,
+            }
+        );
+    } catch (error) {
+        if (isTransactionConflict(error)) {
+            throw createServiceError(
+                "A política foi alterada por outra requisição. Tente novamente.",
+                409
+            );
+        }
+
+        throw error;
+    }
+}
+
 async function findPolicyOrFail(
     database,
     policyId
@@ -271,28 +313,28 @@ async function createRetentionPolicy(
             data.categoryId
         );
 
-    if (data.isActive) {
-        await ensureNoActiveConflict(
-            prisma,
-            {
-                categoryId:
-                    data.categoryId ??
-                    null,
-
-                appliesToStatus:
-                    data.appliesToStatus,
-            }
-        );
-    }
-
     const id =
         randomUUID();
 
-    await prisma.$transaction(
+    await runPolicyTransaction(
         async (tx) => {
-            await tx.retention_policies.create({
-                data: {
-                    id,
+            if (data.isActive) {
+                    await ensureNoActiveConflict(
+                        tx,
+                        {
+                            categoryId:
+                                category?.id ??
+                                null,
+
+                            appliesToStatus:
+                                data.appliesToStatus,
+                        }
+                    );
+            }
+
+                await tx.retention_policies.create({
+                    data: {
+                        id,
 
                     name:
                         data.name,
@@ -310,13 +352,13 @@ async function createRetentionPolicy(
                     action:
                         data.action,
 
-                    is_active:
-                        data.isActive,
-                },
-            });
+                        is_active:
+                            data.isActive,
+                    },
+                });
 
-            await tx.audit_logs.create({
-                data: {
+                await tx.audit_logs.create({
+                    data: {
                     actor_type:
                         "ADMIN",
 
@@ -338,8 +380,8 @@ async function createRetentionPolicy(
                     request_id:
                         randomUUID(),
 
-                    metadata_json:
-                        JSON.stringify({
+                        metadata_json:
+                            JSON.stringify({
                             appliesToStatus:
                                 data.appliesToStatus,
 
@@ -356,9 +398,9 @@ async function createRetentionPolicy(
 
                             isActive:
                                 data.isActive,
-                        }),
-                },
-            });
+                            }),
+                    },
+                });
         }
     );
 
@@ -399,21 +441,6 @@ async function updateRetentionPolicy(
     const newStatus =
         data.appliesToStatus ??
         current.applies_to_status;
-
-    if (current.is_active) {
-        await ensureNoActiveConflict(
-            prisma,
-            {
-                categoryId,
-
-                appliesToStatus:
-                    newStatus,
-
-                ignorePolicyId:
-                    policyId,
-            }
-        );
-    }
 
     const updateData = {};
 
@@ -457,20 +484,35 @@ async function updateRetentionPolicy(
             data.action;
     }
 
-    await prisma.$transaction(
+    await runPolicyTransaction(
         async (tx) => {
-            await tx.retention_policies.update({
-                where: {
-                    id:
-                        policyId,
-                },
+            if (current.is_active) {
+                    await ensureNoActiveConflict(
+                        tx,
+                        {
+                            categoryId,
 
-                data:
-                    updateData,
-            });
+                            appliesToStatus:
+                                newStatus,
 
-            await tx.audit_logs.create({
-                data: {
+                            ignorePolicyId:
+                                policyId,
+                        }
+                    );
+            }
+
+                await tx.retention_policies.update({
+                    where: {
+                        id:
+                            policyId,
+                    },
+
+                    data:
+                        updateData,
+                });
+
+                await tx.audit_logs.create({
+                    data: {
                     actor_type:
                         "ADMIN",
 
@@ -492,15 +534,15 @@ async function updateRetentionPolicy(
                     request_id:
                         randomUUID(),
 
-                    metadata_json:
-                        JSON.stringify({
+                        metadata_json:
+                            JSON.stringify({
                             changedFields:
                                 Object.keys(
                                     updateData
                                 ),
-                        }),
-                },
-            });
+                            }),
+                    },
+                });
         }
     );
 
@@ -529,38 +571,38 @@ async function changeRetentionPolicyStatus(
         );
     }
 
-    if (isActive) {
-        await ensureNoActiveConflict(
-            prisma,
-            {
-                categoryId:
-                    current.category_id,
-
-                appliesToStatus:
-                    current.applies_to_status,
-
-                ignorePolicyId:
-                    policyId,
-            }
-        );
-    }
-
-    await prisma.$transaction(
+    await runPolicyTransaction(
         async (tx) => {
-            await tx.retention_policies.update({
-                where: {
-                    id:
-                        policyId,
-                },
+            if (isActive) {
+                    await ensureNoActiveConflict(
+                        tx,
+                        {
+                            categoryId:
+                                current.category_id,
 
-                data: {
-                    is_active:
-                        isActive,
-                },
-            });
+                            appliesToStatus:
+                                current.applies_to_status,
 
-            await tx.audit_logs.create({
-                data: {
+                            ignorePolicyId:
+                                policyId,
+                        }
+                    );
+            }
+
+                await tx.retention_policies.update({
+                    where: {
+                        id:
+                            policyId,
+                    },
+
+                    data: {
+                        is_active:
+                            isActive,
+                    },
+                });
+
+                await tx.audit_logs.create({
+                    data: {
                     actor_type:
                         "ADMIN",
 
@@ -584,16 +626,16 @@ async function changeRetentionPolicyStatus(
                     request_id:
                         randomUUID(),
 
-                    metadata_json:
-                        JSON.stringify({
+                        metadata_json:
+                            JSON.stringify({
                             previous:
                                 current.is_active,
 
                             current:
                                 isActive,
-                        }),
-                },
-            });
+                            }),
+                    },
+                });
         }
     );
 

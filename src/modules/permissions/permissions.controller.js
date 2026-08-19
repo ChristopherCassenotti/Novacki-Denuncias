@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { listPermissions } = require('./permissions.service');
 
 async function getPermissions(req, res) {
@@ -11,7 +12,7 @@ async function getPermissions(req, res) {
         });
     }
     catch(error){
-        console.error('Erro ao listar permissões:', error.message);
+        safeExceptionLog("admin_permission_list", error);
 
         return res.status(500).json({
             message: 'Não foi possível listar as permissões.',

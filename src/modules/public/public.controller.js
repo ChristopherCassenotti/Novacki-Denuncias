@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { listPublicReportCategories, listPublicUnits } = require('./public.service');
 
 async function getReportCategories(req, res) {
@@ -11,7 +12,7 @@ async function getReportCategories(req, res) {
         });
     }
     catch(error){
-        console.error('Não foi possível listar as categorias:', error.message);
+        safeExceptionLog("public_report_category_list", error);
 
         return res.status(500).json({
             message: 'Não foi possível carregar as categorias.',
@@ -30,7 +31,7 @@ async function getUnits(req, res) {
         });
     }
     catch(error){
-        console.error('Não foi possível listar as unidades:', error.message);
+        safeExceptionLog("public_unit_list", error);
 
         return res.status(500).json({
             message: 'Não foi possível carregar as unidades.',

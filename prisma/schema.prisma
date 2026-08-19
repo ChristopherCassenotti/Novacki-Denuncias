@@ -91,22 +91,23 @@ model report_access_grants {
 }
 
 model report_assignments {
-  id                                                  String                  @id @db.Char(36)
-  report_id                                           String                  @db.Char(36)
-  assigned_user_id                                    String?                 @db.Char(36)
-  assigned_team_id                                    String?                 @db.Char(36)
-  assigned_by_user_id                                 String                  @db.Char(36)
-  type                                                report_assignments_type @default(PRIMARY)
+  id                                                  String                              @id @db.Char(36)
+  report_id                                           String                              @db.Char(36)
+  assigned_user_id                                    String?                             @db.Char(36)
+  assigned_team_id                                    String?                             @db.Char(36)
+  assigned_by_type                                    report_assignments_assigned_by_type @default(ADMIN)
+  assigned_by_user_id                                 String?                             @db.Char(36)
+  type                                                report_assignments_type             @default(PRIMARY)
   reason_ciphertext                                   Bytes?
-  reason_iv                                           Bytes?                  @db.Binary(12)
-  reason_auth_tag                                     Bytes?                  @db.Binary(16)
+  reason_iv                                           Bytes?                              @db.Binary(12)
+  reason_auth_tag                                     Bytes?                              @db.Binary(16)
   reason_key_version                                  Int?
-  started_at                                          DateTime                @default(now())
+  started_at                                          DateTime                            @default(now())
   ended_at                                            DateTime?
-  users_report_assignments_assigned_by_user_idTousers users                   @relation("report_assignments_assigned_by_user_idTousers", fields: [assigned_by_user_id], references: [id], onUpdate: Restrict, map: "fk_assignments_creator")
-  reports                                             reports                 @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_assignments_report")
-  teams                                               teams?                  @relation(fields: [assigned_team_id], references: [id], onUpdate: Restrict, map: "fk_assignments_team")
-  users_report_assignments_assigned_user_idTousers    users?                  @relation("report_assignments_assigned_user_idTousers", fields: [assigned_user_id], references: [id], onUpdate: Restrict, map: "fk_assignments_user")
+  users_report_assignments_assigned_by_user_idTousers users?                              @relation("report_assignments_assigned_by_user_idTousers", fields: [assigned_by_user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_assignments_creator")
+  reports                                             reports                             @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_assignments_report")
+  teams                                               teams?                              @relation(fields: [assigned_team_id], references: [id], onUpdate: Restrict, map: "fk_assignments_team")
+  users_report_assignments_assigned_user_idTousers    users?                              @relation("report_assignments_assigned_user_idTousers", fields: [assigned_user_id], references: [id], onUpdate: Restrict, map: "fk_assignments_user")
 
   @@index([assigned_by_user_id], map: "fk_assignments_creator")
   @@index([report_id, started_at], map: "idx_assignments_report_date")
@@ -134,6 +135,9 @@ model report_attachments {
   file_auth_tag               Bytes?                              @db.Binary(16)
   file_encryption_key_version Int?
   scan_status                 report_attachments_scan_status      @default(PENDING)
+  scan_started_at             DateTime?
+  scan_completed_at           DateTime?
+  scan_attempts               Int                                 @default(0)
   available_at                DateTime?
   quarantined_at              DateTime?
   purged_at                   DateTime?
@@ -152,19 +156,20 @@ model report_attachments {
 }
 
 model report_categories {
-  id                 String                             @id @db.Char(36)
-  code               String                             @unique(map: "uq_report_categories_code") @db.VarChar(80)
-  name               String                             @db.VarChar(150)
-  description        String?                            @db.VarChar(500)
-  default_priority   report_categories_default_priority @default(NORMAL)
-  default_team_id    String?                            @db.Char(36)
-  is_active          Boolean                            @default(true)
-  created_at         DateTime                           @default(now())
-  updated_at         DateTime                           @default(now())
-  teams              teams?                             @relation(fields: [default_team_id], references: [id], onUpdate: Restrict, map: "fk_categories_default_team")
-  reports            reports[]
-  retention_policies retention_policies[]
-  routing_rules      routing_rules[]
+  id                           String                             @id @db.Char(36)
+  code                         String                             @unique(map: "uq_report_categories_code") @db.VarChar(80)
+  name                         String                             @db.VarChar(150)
+  description                  String?                            @db.VarChar(500)
+  default_priority             report_categories_default_priority @default(NORMAL)
+  default_team_id              String?                            @db.Char(36)
+  is_active                    Boolean                            @default(true)
+  created_at                   DateTime                           @default(now())
+  updated_at                   DateTime                           @default(now())
+  anonymized_report_statistics anonymized_report_statistics[]
+  teams                        teams?                             @relation(fields: [default_team_id], references: [id], onUpdate: Restrict, map: "fk_categories_default_team")
+  reports                      reports[]
+  retention_policies           retention_policies[]
+  routing_rules                routing_rules[]
 
   @@index([is_active], map: "idx_categories_active")
   @@index([default_team_id], map: "idx_categories_team")
@@ -274,22 +279,23 @@ model report_restricted_users {
 }
 
 model report_retention_executions {
-  id                    String                             @id @db.Char(36)
-  report_id             String?                            @db.Char(36)
-  policy_id             String?                            @db.Char(36)
-  report_reference_hash Bytes                              @db.Binary(32)
-  action                report_retention_executions_action
-  status                report_retention_executions_status @default(PENDING)
-  scheduled_at          DateTime
-  started_at            DateTime?
-  completed_at          DateTime?
-  executed_by_user_id   String?                            @db.Char(36)
-  error_message         String?                            @db.VarChar(1000)
-  created_at            DateTime                           @default(now())
-  updated_at            DateTime                           @default(now())
-  retention_policies    retention_policies?                @relation(fields: [policy_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_policy")
-  reports               reports?                           @relation(fields: [report_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_report")
-  users                 users?                             @relation(fields: [executed_by_user_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_user")
+  id                           String                             @id @db.Char(36)
+  report_id                    String?                            @db.Char(36)
+  policy_id                    String?                            @db.Char(36)
+  report_reference_hash        Bytes                              @db.Binary(32)
+  action                       report_retention_executions_action
+  status                       report_retention_executions_status @default(PENDING)
+  scheduled_at                 DateTime
+  started_at                   DateTime?
+  completed_at                 DateTime?
+  executed_by_user_id          String?                            @db.Char(36)
+  error_message                String?                            @db.VarChar(1000)
+  created_at                   DateTime                           @default(now())
+  updated_at                   DateTime                           @default(now())
+  retention_policies           retention_policies?                @relation(fields: [policy_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_policy")
+  reports                      reports?                           @relation(fields: [report_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_report")
+  users                        users?                             @relation(fields: [executed_by_user_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_user")
+  retention_object_purge_queue retention_object_purge_queue[]
 
   @@index([executed_by_user_id], map: "fk_retention_exec_user")
   @@index([policy_id], map: "idx_retention_exec_policy")
@@ -609,6 +615,39 @@ model users {
   @@index([is_active], map: "idx_users_active")
 }
 
+model retention_object_purge_queue {
+  id                          String                              @id @db.Char(36)
+  execution_id                String                              @db.Char(36)
+  storage_key                 String                              @db.VarChar(500)
+  status                      retention_object_purge_queue_status @default(PENDING)
+  attempts                    Int                                 @default(0)
+  last_error                  String?                             @db.VarChar(1000)
+  created_at                  DateTime                            @default(now())
+  updated_at                  DateTime                            @default(now()) @updatedAt
+  report_retention_executions report_retention_executions         @relation(fields: [execution_id], references: [id], onDelete: Cascade, map: "fk_retention_purge_execution")
+
+  @@unique([execution_id, storage_key], map: "uq_retention_purge_execution_key")
+  @@index([execution_id], map: "idx_retention_purge_execution")
+  @@index([status, created_at], map: "idx_retention_purge_status")
+}
+
+model anonymized_report_statistics {
+  id                     String            @id @db.Char(36)
+  period_month           DateTime          @db.Date
+  category_id            String            @db.Char(36)
+  total_reports          Int               @default(0) @db.UnsignedInt
+  anonymous_reports      Int               @default(0) @db.UnsignedInt
+  identified_reports     Int               @default(0) @db.UnsignedInt
+  immediate_risk_reports Int               @default(0) @db.UnsignedInt
+  created_at             DateTime          @default(now())
+  updated_at             DateTime          @default(now()) @updatedAt
+  report_categories      report_categories @relation(fields: [category_id], references: [id], map: "fk_anonymized_stats_category")
+
+  @@unique([period_month, category_id], map: "uq_anonymized_stats_month_category")
+  @@index([period_month], map: "idx_anonymized_stats_period")
+  @@index([category_id], map: "idx_anonymized_stats_category")
+}
+
 enum audit_logs_actor_type {
   ADMIN
   SYSTEM
@@ -818,10 +857,23 @@ enum routing_rules_set_priority {
   CRITICAL
 }
 
+enum retention_object_purge_queue_status {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 enum report_attachments_scan_status {
   PENDING
+  SCANNING
   CLEAN
   INFECTED
   FAILED
   QUARANTINED
+}
+
+enum report_assignments_assigned_by_type {
+  ADMIN
+  SYSTEM
 }

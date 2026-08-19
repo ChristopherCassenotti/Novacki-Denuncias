@@ -4,6 +4,12 @@ const prisma =
     );
 
 const {
+    safeExceptionLog,
+} = require(
+    "../../utils/safeLog"
+);
+
+const {
     createPublicReport,
 } = require(
     "../reports/publicReport.service"
@@ -152,15 +158,15 @@ async function createPublicReportWithAttachmentsHandler(
             } catch (
                 cleanupError
             ) {
-                console.error(
-                    "Erro ao desfazer denúncia após falha de anexos:",
+                safeExceptionLog(
+                    "public_report_attachment_rollback",
                     cleanupError
                 );
             }
         }
 
-        console.error(
-            "Erro ao registrar denúncia com anexos:",
+        safeExceptionLog(
+            "public_report_with_attachments_creation",
             error
         );
 

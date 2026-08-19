@@ -1,21 +1,17 @@
 const prisma = require("./prisma");
+const { safeExceptionLog } = require("../utils/safeLog");
 
 async function main() {
-  const usersCount = await prisma.users.count();
-  const reportsCount = await prisma.reports.count();
-  const categoriesCount =
-    await prisma.report_categories.count();
+  await prisma.users.count();
+  await prisma.reports.count();
+  await prisma.report_categories.count();
 
-  console.log("✅ Conexão com o banco realizada.");
-  console.log(`Usuários: ${usersCount}`);
-  console.log(`Denúncias: ${reportsCount}`);
-  console.log(`Categorias: ${categoriesCount}`);
+  console.log("Conexão com o banco validada.");
 }
 
 main()
   .catch((error) => {
-    console.error("❌ Erro ao testar o banco:");
-    console.error(error);
+    safeExceptionLog("database_connection_test", error);
 
     process.exitCode = 1;
   })

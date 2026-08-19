@@ -4,6 +4,7 @@ const {
   encryptJson,
   decryptJson,
 } = require("./crypto.service");
+const { safeExceptionLog } = require("../utils/safeLog");
 
 function main() {
   const originalReport = {
@@ -27,11 +28,7 @@ function main() {
     immediateRisk: false,
   };
 
-  console.log(
-    "Conteúdo original:"
-  );
-
-  console.log(originalReport);
+  console.log("Conteúdo de teste preparado.");
 
   const encrypted =
     encryptJson(
@@ -63,11 +60,7 @@ function main() {
       "REPORT_CONTENT"
     );
 
-  console.log(
-    "\nConteúdo descriptografado:"
-  );
-
-  console.log(decrypted);
+  console.log("Conteúdo descriptografado com sucesso.");
 
   const isEqual =
     JSON.stringify(originalReport) ===
@@ -148,13 +141,7 @@ try {
     "\n✅ Teste de criptografia concluído com sucesso."
   );
 } catch (error) {
-  console.error(
-    "\n❌ Teste de criptografia falhou:"
-  );
-
-  console.error(
-    error.message
-  );
+  safeExceptionLog("crypto_self_test", error);
 
   process.exitCode = 1;
 }

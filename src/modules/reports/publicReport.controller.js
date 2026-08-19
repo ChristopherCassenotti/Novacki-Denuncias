@@ -1,5 +1,6 @@
 const { createPublicReportSchema } = require('./publicReport.schema');
 const { createPublicReport } = require('./publicReport.service');
+const { safeExceptionLog } = require('../../utils/safeLog');
 
 function formatValidationErrors(error){
     return error.issues.map((issue) => ({
@@ -40,11 +41,7 @@ async function createPublicReportHandler(req, res) {
             });
         }
         
-        console.error('Erro ao registrar denúncia:',{ 
-            name: error.message,
-            code: error.code,
-            message: error.message,
-        });
+        safeExceptionLog("public_report_creation", error);
 
         return res.status(500).json({
             message: 'Não foi possível registrar a denúncia.',

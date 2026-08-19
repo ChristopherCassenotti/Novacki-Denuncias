@@ -1,6 +1,7 @@
 const { createReporterMessageSchema, } = require("./reporterMessages.schema");
 const { listReporterMessages, createReporterMessage, } = require("./reporterMessages.service");
 const { getReporterHistory, } = require("./reporterHistory.service");
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 function formatValidationErrors(error){
     return error.issues.map((issue)=>({
@@ -14,7 +15,7 @@ function sendError(res, error, fallbackMessage){
         return res.status(error.statusCode).json({message: error.message});
     }
 
-    console.error(fallbackMessage, error);
+    safeExceptionLog("reporter_message", error);
 
     return res.status(500).json({
         message: fallbackMessage,

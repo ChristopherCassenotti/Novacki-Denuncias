@@ -9,6 +9,7 @@ const prisma =
     require(
         "../../database/prisma"
     );
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 const {
     encryptJson,
@@ -446,8 +447,8 @@ async function createReporterAttachment(
         } catch (
             cleanupError
         ) {
-            console.error(
-                "Erro ao remover arquivo órfão do R2:",
+            safeExceptionLog(
+                "reporter_attachment_orphan_cleanup",
                 cleanupError
             );
         }
@@ -538,8 +539,12 @@ async function prepareReporterAttachmentDownload(
     }
 
     if (
-        attachment.scan_status ===
-        "PENDING"
+        [
+            "PENDING",
+            "SCANNING",
+        ].includes(
+            attachment.scan_status
+        )
     ) {
         throw createServiceError(
             "Este arquivo ainda está sendo analisado.",
@@ -588,8 +593,8 @@ async function prepareReporterAttachmentDownload(
                 attachment.storage_key
             );
     } catch (error) {
-        console.error(
-            "Erro ao buscar anexo público no R2:",
+        safeExceptionLog(
+            "reporter_attachment_storage_fetch",
             error
         );
 
@@ -849,8 +854,8 @@ async function createInitialReporterAttachments(
             } catch (
                 cleanupError
             ) {
-                console.error(
-                    "Erro ao remover anexo inicial órfão:",
+                safeExceptionLog(
+                    "initial_attachment_orphan_cleanup",
                     cleanupError
                 );
             }

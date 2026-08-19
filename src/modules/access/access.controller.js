@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { getUserAccessContext } = require('./access.service');
 
 async function getMyAccess(req, res){
@@ -13,7 +14,7 @@ async function getMyAccess(req, res){
         });
     }
     catch(error){
-        console.error("Erro ao consultar acesso do usuário:", error.message);
+        safeExceptionLog("admin_access_context", error);
 
         return res.status(500).json({ message: "Não foi possível consultar os perfis e permissões." });
     }

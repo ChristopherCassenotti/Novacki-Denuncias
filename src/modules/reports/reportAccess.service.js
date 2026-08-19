@@ -1,9 +1,11 @@
 const { randomBytes, createHash, timingSafeEqual } = require('node:crypto');
 const prisma = require('../../database/prisma');
+const {
+    reporterSessionDurationMs,
+} = require('../../config/cookies');
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
-const REPORTER_SESSION_MINUTES = 60;
 
 function createServiceError(message, statusCode){
     const error = new Error(message);
@@ -58,7 +60,7 @@ function calculateLockUntil(){
 }
 
 function calculateSessionExpiration(){
-    return new Date(Date.now() + REPORTER_SESSION_MINUTES * 60 * 1000); 
+    return new Date(Date.now() + reporterSessionDurationMs()); 
 }
 
 async function registerFailedAttempt(credential) {

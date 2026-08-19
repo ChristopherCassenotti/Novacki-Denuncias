@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
   assertReportCapability,
 } = require(
@@ -42,10 +43,7 @@ function requireReportCapability({
           });
       }
 
-      console.error(
-        "Erro ao validar capacidade da denúncia:",
-        error
-      );
+      safeExceptionLog("admin_report_capability", error);
 
       return res.status(500).json({
         message:

@@ -214,10 +214,15 @@ async function scheduleRetentionForReport(
         );
 
     if (!policy) {
+        await cancelPendingRetentionForReport(
+            reportId,
+            null,
+            "NO_ACTIVE_RETENTION_POLICY"
+        );
+
         return {
             scheduled: false,
-            reason:
-                "NO_POLICY",
+            reason: "NO_POLICY",
         };
     }
 
@@ -507,6 +512,25 @@ async function scheduleRetentionForReport(
 async function scheduleRetentionBatch({
     limit = 100,
 } = {}) {
+    const pageSize =
+        Number.isInteger(limit)
+            ? Math.min(
+                Math.max(limit, 1),
+                500
+            )
+            : 100;
+
+    let cursor = null;
+
+    const result = {
+        processed: 0,
+        scheduled: 0,
+        alreadyScheduled: 0,
+        skipped: 0,
+        failed: 0,
+        errors: [],
+    };
+
     /*
      * Busca denúncias encerradas.
      *
@@ -514,9 +538,10 @@ async function scheduleRetentionBatch({
      * entram, porque a função individual
      * é idempotente e consegue detectar
      * agendamento existente.
-     */
-    const reports =
-        await prisma.reports.findMany({
+    */
+    do {
+        const reports =
+            await prisma.reports.findMany({
             where: {
                 status: {
                     in: [
@@ -533,28 +558,34 @@ async function scheduleRetentionBatch({
                 id: true,
             },
 
+            ...(cursor
+                ? {
+                    cursor: {
+                        id:
+                            cursor,
+                    },
+
+                    skip: 1,
+                }
+                : {}),
+
             take:
-                limit,
+                pageSize,
 
             orderBy: {
-                updated_at:
+                id:
                     "asc",
             },
-        });
+            });
 
-    const result = {
-        processed: 0,
-        scheduled: 0,
-        alreadyScheduled: 0,
-        skipped: 0,
-        failed: 0,
-        errors: [],
-    };
+        if (!reports.length) {
+            break;
+        }
 
-    for (
-        const report of reports
-    ) {
-        result.processed++;
+        for (
+            const report of reports
+        ) {
+            result.processed++;
 
         try {
             const response =
@@ -590,7 +621,13 @@ async function scheduleRetentionBatch({
                     error.message,
             });
         }
-    }
+        }
+
+        cursor =
+            reports[
+                reports.length - 1
+            ].id;
+    } while (true);
 
     return result;
 }

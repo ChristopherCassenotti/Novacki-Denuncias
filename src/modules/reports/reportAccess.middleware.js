@@ -1,4 +1,5 @@
 const {assertUserCanAccessReport,} = require("../adminReportRestrictions/reportAccess.service");
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 async function requireReportAccess(req,res,next,reportId) {
   try {
@@ -14,10 +15,7 @@ async function requireReportAccess(req,res,next,reportId) {
       return res.status(error.statusCode).json({ message: error.message,});
     }
 
-    console.error(
-      "Erro ao validar acesso à denúncia:",
-      error
-    );
+    safeExceptionLog("admin_report_access_validation", error);
 
     return res.status(500).json({
       message: "Não foi possível validar o acesso à denúncia.",

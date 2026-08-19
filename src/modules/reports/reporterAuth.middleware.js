@@ -1,10 +1,12 @@
 const { findReporterSession, } = require('./reportAccess.service');
-
-const REPORTER_COOKIE_NAME = 'nvk_reporter_session';
+const {
+    reporterCookieName,
+} = require('../../config/cookies');
+const { safeExceptionLog } = require('../../utils/safeLog');
 
 async function requireReporterAuth(req, res, next) {
     try{
-        const token = req.cookies?.[REPORTER_COOKIE_NAME];
+        const token = req.cookies?.[reporterCookieName()];
 
         if(!token){
             return res.status(401).json({
@@ -28,10 +30,10 @@ async function requireReporterAuth(req, res, next) {
         return next();
     }
     catch(error){
-        console.error('Erro ao validar sessão do denunciante:', error.message);
+        safeExceptionLog("reporter_session_validation", error);
 
         return res.status(500).json({message:'Não foi possível validar a sessão.'});
     }
 }
 
-module.exports = {REPORTER_COOKIE_NAME, requireReporterAuth};
+module.exports = {requireReporterAuth};

@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {auditLogsQuerySchema,auditLogIdParamSchema} = require("./adminAuditLogs.schema");
 
 const {listAuditLogs,getAuditLogById,} = require("./adminAuditLogs.service");
@@ -36,10 +37,7 @@ function sendError(
             });
     }
 
-    console.error(
-        fallback,
-        error
-    );
+    safeExceptionLog("admin_audit_log", error);
 
     return res.status(500).json({
         message:

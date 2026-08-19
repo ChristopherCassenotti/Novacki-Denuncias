@@ -1,8 +1,15 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
     scheduleRetentionForReport,
     scheduleRetentionBatch,
 } = require(
     "./retentionScheduler.service"
+);
+
+const {
+    reportIdParamSchema,
+} = require(
+    "./retentionScheduler.schema"
 );
 
 function sendError(
@@ -25,10 +32,7 @@ function sendError(
             });
     }
 
-    console.error(
-        fallback,
-        error
-    );
+    safeExceptionLog("retention_scheduler", error);
 
     return res.status(500).json({
         message:
@@ -40,10 +44,22 @@ async function scheduleReportHandler(
     req,
     res
 ) {
+    const validation =
+        reportIdParamSchema.safeParse(
+            req.params
+        );
+
+    if (!validation.success) {
+        return res.status(400).json({
+            message:
+                "ID da denúncia inválido.",
+        });
+    }
+
     try {
         const result =
             await scheduleRetentionForReport(
-                req.params.id
+                validation.data.id
             );
 
         return res.status(200).json({

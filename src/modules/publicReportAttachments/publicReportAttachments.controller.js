@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
     pipeline,
 } = require(
@@ -39,8 +40,8 @@ function sendError(
             });
     }
 
-    console.error(
-        fallback,
+    safeExceptionLog(
+        "reporter_attachment",
         error
     );
 
@@ -254,8 +255,8 @@ async function downloadReporterAttachmentHandler(
             );
         }
 
-        console.error(
-            "Erro durante streaming do anexo:",
+        safeExceptionLog(
+            "reporter_attachment_stream",
             error
         );
 

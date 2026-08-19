@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
     dashboardQuerySchema,
 } = require(
@@ -57,10 +58,7 @@ async function getDashboardHandler(
                 dashboard,
         });
     } catch (error) {
-        console.error(
-            "Erro ao carregar dashboard:",
-            error
-        );
+        safeExceptionLog("admin_dashboard", error);
 
         return res.status(500).json({
             message:

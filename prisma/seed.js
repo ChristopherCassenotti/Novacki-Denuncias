@@ -4,6 +4,7 @@ const { randomUUID } = require("node:crypto");
 const bcrypt = require("bcryptjs");
 
 const prisma = require("../src/database/prisma");
+const { safeExceptionLog } = require("../src/utils/safeLog");
 
 const requiredEnvironmentVariables = [
   "SEED_ADMIN_NAME",
@@ -547,20 +548,18 @@ async function main() {
   await upsertCategories();
   console.log("Categorias cadastradas.");
 
-  const administrator = await createInitialAdministrator(
+  await createInitialAdministrator(
     roleMap,
     teams.triageTeam
   );
 
   console.log("Administrador inicial cadastrado.");
-  console.log(`E-mail: ${administrator.email}`);
   console.log("Seed finalizado com sucesso.");
 }
 
 main()
   .catch((error) => {
-    console.error("Erro ao executar o seed:");
-    console.error(error);
+    safeExceptionLog("database_seed", error);
 
     process.exitCode = 1;
   })

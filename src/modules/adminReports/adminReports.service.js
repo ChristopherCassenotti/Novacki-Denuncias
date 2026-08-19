@@ -3,6 +3,7 @@ const { decryptJson, encryptJson } = require('../../security/crypto.service');
 const { randomUUID } = require('node:crypto');
 const { getReportListAccess } = require('../access/reportCapability.service');
 const {scheduleRetentionForReport,cancelPendingRetentionForReport,} = require("../retentionScheduler/retentionScheduler.service");
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 function createServiceError(message, statusCode){
     const error = new Error(message);
@@ -468,8 +469,8 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
             );
         }
     } catch (error) {
-        console.error(
-            "Falha ao atualizar a retenção após mudança de status:",
+        safeExceptionLog(
+            "report_status_retention_update",
             error
         );
     }
@@ -731,6 +732,9 @@ async function assignReport(
 
           assigned_by_user_id:
             actorUserId,
+
+          assigned_by_type:
+            "ADMIN",
 
           type:
             targetType === "USER"

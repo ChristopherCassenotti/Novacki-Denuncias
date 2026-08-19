@@ -1,5 +1,6 @@
 const {  getTeams, getTeam, createTeamHandler, updateTeamHandler, replaceMembersHandler, changeStatusHandler, } = require('./teams.controller');
 const { requireAdminAuth } = require('../auth/auth.middleware');
+const { requireTrustedOrigin } = require('../../middlewares/originProtection.middleware');
 const { requirePermissions } = require('../access/access.middleware');
 
 const express = require('express');
@@ -7,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 
 router.use(requireAdminAuth);
+router.use(requireTrustedOrigin);
 router.use(requirePermissions('TEAM_MANAGE'));
 
 router.get('/', getTeams);

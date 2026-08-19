@@ -4,6 +4,7 @@ const {createAdminSession} = require('./session.service');
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../../database/prisma");
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("invalid-password-placeholder", 12);
 
@@ -43,9 +44,9 @@ async function recordLoginAttempt({
             },
         });
     } catch (error) {
-        console.error(
-            "Não foi possível registrar a tentativa de login:",
-            error.message
+        safeExceptionLog(
+            "admin_login_attempt_audit",
+            error
         );
     }
 }

@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { userIdParamSchema, createUserSchema, updateUserSchema, replaceUserRolesSchema, changeUserStatusSchema, resetUserPasswordSchema, listUsersQuerySchema, } = require("./users.schema");
 const { getUserById, listUsers, createUser: createUserService, updateUser: updateUserService, replaceUserRoles, changeUserStatus, resetUserPassword,} = require("./users.service");
 
@@ -21,7 +22,7 @@ function sendControllerError(res, error, fallbackMessage){
         });
     }
 
-    console.error(fallbackMessage, error.message);
+    safeExceptionLog("admin_user", error);
 
     return res.status(500).json({
         message: fallbackMessage,

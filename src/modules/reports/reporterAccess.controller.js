@@ -1,27 +1,18 @@
 const { accessReportSchema } = require('./reportAccess.schema');
 const { authenticateReporter, revokeReporterSession } = require('./reportAccess.service');
 const { getReporterReport } = require('./reporterReport.service');
-const { REPORTER_COOKIE_NAME } = require('./reporterAuth.middleware');
+const {
+    reporterCookieOptions,
+    reporterCookieName,
+    reporterSessionDurationMs,
+} = require('../../config/cookies');
+const { safeExceptionLog } = require('../../utils/safeLog');
 
 function formatValidationErrors(error){
     return error.issues.map((issue) => ({
         field: issue.path.join('.'),
         message: issue.message,
     }));
-}
-
-function getReporterCookieOptions(expiresAt){
-    return {
-        httpOnly: true,
-
-        secure: process.env.NODE_ENV === 'production',
-
-        sameSite: 'strict',
-
-        expires: expiresAt,
-
-        path: '/api/public/reports',
-    };
 }
 
 async function accessReportHandler(req, res) {
@@ -37,7 +28,14 @@ async function accessReportHandler(req, res) {
     try{
         const result = await authenticateReporter(validation.data);
 
-        res.cookie(REPORTER_COOKIE_NAME, result.sessionToken, getReporterCookieOptions(result.expiresAt));
+        res.cookie(
+            reporterCookieName(),
+            result.sessionToken,
+            {
+                ...reporterCookieOptions(),
+                maxAge: reporterSessionDurationMs(),
+            }
+        );
 
         return res.status(200).json({
             message: 'Acesso autorizado.',
@@ -52,7 +50,7 @@ async function accessReportHandler(req, res) {
             return res.status(error.statusCode).json({message: error.message});
         }
 
-        console.error('Erro ao acessar denúncia:', error);
+        safeExceptionLog("reporter_access", error);
 
         return res.status(500).json({message: 'Não foi possível validar o acesso.'});
     }
@@ -73,7 +71,7 @@ async function getCurrentReportHandler(req, res) {
             return res.status(error.statusCode).json({message: error.message});
         }
 
-        console.error('Erro ao consultar denúncia:', error);
+        safeExceptionLog("reporter_report_query", error);
         
         return res.status(500).json({
             message: 'Não foi possível consultar a denúncia.',
@@ -85,16 +83,9 @@ async function logoutReporterHandler(req, res) {
     try{
         await revokeReporterSession(req.reporterAuth.sessionId);
 
-        res.clearCookie(REPORTER_COOKIE_NAME,
-            {
-                httpOnly: true,
-
-                secure: process.env.NODE_ENV === 'production',
-
-                sameSite: 'strict',
-
-                path: '/api/public/reports',
-            }
+        res.clearCookie(
+            reporterCookieName(),
+            reporterCookieOptions()
         );
 
         return res.status(200).json({
@@ -102,7 +93,7 @@ async function logoutReporterHandler(req, res) {
         });
     }
     catch(error){
-        console.error('Erro ao encerrar sessão:', error);
+        safeExceptionLog("reporter_logout", error);
 
         return res.status(500).json({
             message: 'Não foi possível encerrar a sessão.',

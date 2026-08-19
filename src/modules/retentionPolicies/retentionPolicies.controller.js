@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
     policyIdParamSchema,
     createRetentionPolicySchema,
@@ -37,10 +38,7 @@ function sendError(
             });
     }
 
-    console.error(
-        fallback,
-        error
-    );
+    safeExceptionLog("retention_policy", error);
 
     return res.status(500).json({
         message:

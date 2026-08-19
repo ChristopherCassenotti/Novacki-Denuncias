@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
   reportIdParamSchema,
 } = require(
@@ -53,10 +54,7 @@ function sendError(
       });
   }
 
-  console.error(
-    fallback,
-    error
-  );
+  safeExceptionLog("admin_report_access_grant", error);
 
   return res.status(500).json({
     message:

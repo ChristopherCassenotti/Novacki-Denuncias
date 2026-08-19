@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
     reportIdParamSchema,
 } = require(
@@ -43,8 +44,8 @@ function sendError(
             });
     }
 
-    console.error(
-        fallback,
+    safeExceptionLog(
+        "admin_report_attachment",
         error
     );
 
@@ -276,8 +277,8 @@ async function downloadAttachmentHandler(
         }
 
 
-        console.error(
-            "Erro durante streaming do anexo:",
+        safeExceptionLog(
+            "admin_report_attachment_stream",
             error
         );
 

@@ -1,4 +1,5 @@
 const prisma = require("./prisma");
+const { safeExceptionLog } = require("../utils/safeLog");
 
 async function main() {
   const connection = await prisma.$queryRaw`
@@ -23,15 +24,18 @@ async function main() {
       AND COLUMN_NAME IN ('name', 'email')
   `;
 
-  console.log("CONEXÃO:");
-  console.table(connection);
+  console.log("Configuração de conexão e collation validada.");
 
-  console.log("COLUNAS:");
-  console.table(columns);
+  if (!connection.length || !columns.length) {
+    throw new Error("Configuração de collation incompleta.");
+  }
 }
 
 main()
-  .catch(console.error)
+  .catch((error) => {
+    safeExceptionLog("database_collation_test", error);
+    process.exitCode = 1;
+  })
   .finally(async () => {
     await prisma.$disconnect();
   });

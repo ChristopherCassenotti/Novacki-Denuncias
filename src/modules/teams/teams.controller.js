@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { teamIdParamSchema, createTeamSchema, updateTeamSchema, replaceMembersSchema, changeTeamStatusSchema } = require('./teams.schema');
 const { getTeamById, listTeams, createTeam, updateTeam, replaceTeamMembers, changeTeamStatus } = require('./teams.service');
 
@@ -19,7 +20,7 @@ function sendControllerError(res, error, fallbackMessage){
         });
     }
 
-    console.error(fallbackMessage, error.message);
+    safeExceptionLog("admin_team", error);
 
     return res.status(500).json({
         message: fallbackMessage,

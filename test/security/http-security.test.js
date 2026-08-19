@@ -57,8 +57,13 @@ test("bloqueia origem cross-site em operações administrativas", async () => {
 
 test("limita tentativas repetidas de login", async () => {
   let response;
+  const configuredLimit = Number(process.env.RATE_LIMIT_LOGIN_MAX);
+  const loginLimit =
+    Number.isInteger(configuredLimit) && configuredLimit > 0
+      ? configuredLimit
+      : 10;
 
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  for (let attempt = 0; attempt <= loginLimit; attempt += 1) {
     response = await fetch(`${baseUrl}/api/admin/auth/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },

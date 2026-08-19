@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {
     reportLegalHoldParamSchema,
     applyLegalHoldSchema,
@@ -34,8 +35,8 @@ function sendError(
             });
     }
 
-    console.error(
-        fallback,
+    safeExceptionLog(
+        "admin_report_legal_hold",
         error
     );
 

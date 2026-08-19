@@ -1,28 +1,31 @@
-function getSessionCookieName() {
-  return process.env.ADMIN_SESSION_COOKIE || "nvk_admin_session";
-}
+const {
+  adminCookieOptions,
+} = require('../../config/cookies');
 
-function getBaseCookieOptions() {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    priority: "high",
-  };
+function getSessionCookieName() {
+  return process.env.ADMIN_COOKIE_NAME || "nvk_admin_session";
 }
 
 function setSessionCookie(res, token, expiresAt) {
+  const expirationTime =
+    expiresAt instanceof Date
+      ? expiresAt.getTime()
+      : new Date(expiresAt).getTime();
+
+  if (!Number.isFinite(expirationTime)) {
+    throw new Error("Expiração da sessão administrativa inválida.");
+  }
+
   res.cookie(getSessionCookieName(), token, {
-    ...getBaseCookieOptions(),
-    expires: expiresAt,
+    ...adminCookieOptions(),
+    maxAge: Math.max(0, expirationTime - Date.now()),
   });
 }
 
 function clearSessionCookie(res) {
   res.clearCookie(
     getSessionCookieName(),
-    getBaseCookieOptions()
+    adminCookieOptions()
   );
 }
 

@@ -5,6 +5,7 @@ const {
 const {
   getSessionCookieName,
 } = require("./auth.cookies");
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 async function requireAdminAuth(req, res, next) {
   try {
@@ -33,7 +34,7 @@ async function requireAdminAuth(req, res, next) {
 
     return next();
   } catch (error) {
-    console.error("Erro ao validar sessão:", error);
+    safeExceptionLog("admin_session_validation", error);
 
     return res.status(500).json({
       message: "Não foi possível validar a sessão.",

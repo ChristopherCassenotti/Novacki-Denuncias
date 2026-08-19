@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { roleIdParamSchema, createRoleSchema, updateRoleSchema, replaceRolePermissionsSchema, changeRoleStatusSchema } = require('./roles.schema');
 const { getRoleById, listRoles, createRole, updateRole, replaceRolePermissions, changeRoleStatus, } = require('./roles.service');
 
@@ -15,7 +16,7 @@ function sendControllerError(res, error, fallbackMessage){
         });
     }
 
-    console.error(fallbackMessage, error.message);
+    safeExceptionLog("admin_role", error);
 
     return res.status(500).json({
         message: fallbackMessage,

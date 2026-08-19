@@ -7,6 +7,9 @@ const adminReportsRoutes = require("../../src/modules/adminReports/admin.routes"
 const authRoutes = require("../../src/modules/auth/auth.routes");
 const permissionsRoutes = require("../../src/modules/permissions/permissions.routes");
 const publicRoutes = require("../../src/modules/public/public.routes");
+const retentionExecutorRoutes = require("../../src/modules/retentionExecutor/retentionExecutor.routes");
+const retentionPoliciesRoutes = require("../../src/modules/retentionPolicies/retentionPolicies.routes");
+const retentionSchedulerRoutes = require("../../src/modules/retentionScheduler/retentionScheduler.routes");
 const rolesRoutes = require("../../src/modules/roles/roles.routes");
 const teamsRoutes = require("../../src/modules/teams/temas.routes");
 const usersRoutes = require("../../src/modules/users/users.routes");
@@ -107,6 +110,21 @@ test("registra todas as rotas administrativas de configuracao e acesso", () => {
     ]],
     [accessRoutes, ["GET /me"]],
     [permissionsRoutes, ["GET /"]],
+    [retentionPoliciesRoutes, [
+      "GET /",
+      "GET /:id",
+      "POST /",
+      "PATCH /:id",
+      "PATCH /:id/status",
+    ]],
+    [retentionSchedulerRoutes, [
+      "POST /run",
+      "POST /reports/:id",
+    ]],
+    [retentionExecutorRoutes, [
+      "POST /run",
+      "POST /:id/run",
+    ]],
     [rolesRoutes, [
       "GET /",
       "GET /:id",

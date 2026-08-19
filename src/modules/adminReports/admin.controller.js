@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const { updateReportPrioritySchema, updateReportStatusSchema, assignReportSchema, reportIdParamSchema, listReportsQuerySchema } = require('./adminReports.schema');
 const { listAdminReports, getAdminReport, updateReportPriority, updateReportStatus, assignReport, unassignReport } = require('./adminReports.service');
 
@@ -15,7 +16,7 @@ function sendError(res, error, fallbackMessage){
         return res.status(error.statusCode).json({message: error.message});
     }
 
-    console.error(fallbackMessage, error);
+    safeExceptionLog("admin_report", error);
 
     return res.status(500).json({message: fallbackMessage});
 }

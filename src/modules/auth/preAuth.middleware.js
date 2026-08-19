@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 function requirePreAuth(requiredNextStep) {
   return function preAuthMiddleware(req, res, next) {
@@ -61,10 +62,7 @@ function requirePreAuth(requiredNextStep) {
 
       return next();
     } catch (error) {
-      console.error("Erro ao validar preAuthToken:", {
-        name: error.name,
-        message: error.message,
-      });
+      safeExceptionLog("admin_pre_auth_validation", error);
 
       return res.status(401).json({
         message: "Token temporário inválido ou expirado.",

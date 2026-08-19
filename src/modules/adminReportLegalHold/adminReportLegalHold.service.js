@@ -8,6 +8,7 @@ const prisma =
     require(
         "../../database/prisma"
     );
+const { safeExceptionLog } = require("../../utils/safeLog");
 
 const {
     encryptJson,
@@ -205,6 +206,9 @@ async function applyLegalHold(
                 data: {
                     legal_hold:
                         true,
+
+                    retention_until:
+                        null,
 
                     legal_hold_reason_ciphertext:
                         encryptedReason
@@ -455,8 +459,8 @@ async function releaseLegalHold(
             reportId
         );
     } catch (error) {
-        console.error(
-            "Falha ao reagendar retenção após remoção do Legal Hold:",
+        safeExceptionLog(
+            "legal_hold_retention_reschedule",
             error
         );
     }

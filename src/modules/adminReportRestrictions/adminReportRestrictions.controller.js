@@ -1,3 +1,4 @@
+const { safeExceptionLog } = require("../../utils/safeLog");
 const {reportIdParamSchema,} = require("../adminReports/adminReports.schema");
 const {createRestrictionSchema, restrictionUserParamSchema,} = require("./adminReportRestrictions.schema");
 const {listRestrictions,createRestriction,revokeRestriction,} = require("./adminReportRestrictions.service");
@@ -17,7 +18,7 @@ function sendError(res, error, fallback) {
     return res.status(error.statusCode).json({ message: error.message,});
   }
 
-  console.error(fallback, error);
+  safeExceptionLog("admin_report_restriction", error);
 
   return res.status(500).json({
     message: fallback,

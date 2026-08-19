@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAdminAuth } = require('../auth/auth.middleware')
+const { requireTrustedOrigin } = require('../../middlewares/originProtection.middleware');
 const { getReportHandler, getReportsHandler, updateStatusHandler, updatePriorityHandler, assignReportHandler , unassignReportHandler } = require('./admin.controller');
 const { listMessagesHandler, createMessageHandler } = require('../adminReportMessages/adminReportMessages.controller');
 const { listInternalNotesHandler, createInternalNoteHandler } = require('../adminReportsInternalNotes/adminReportInternalNotes.controller');
@@ -22,6 +23,7 @@ const { requirePermissions } = require('../access/access.middleware');
 
 
 router.use(requireAdminAuth);
+router.use(requireTrustedOrigin);
 router.param('id', requireReportAccess);
 
 router.get('/', getReportsHandler);

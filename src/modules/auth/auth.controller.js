@@ -1,9 +1,13 @@
 const { loginSchema, changeInitialPasswordSchema, completeCredentialSetupSchema } = require('./auth.schema');
 const { authenticateAdmin, changeInitialPassword } = require('./auth.service');
 const { completeCredentialSetup: completeCredentialSetupService } = require('./credential.service');
-const { setSessionCookie } = require('./auth.cookies');
 const { revokeSession } = require('./session.service');
-const { getSessionCookieName, clearSessionCookie } = require('./auth.cookies');
+const { safeExceptionLog } = require('../../utils/safeLog');
+const {
+  setSessionCookie,
+  getSessionCookieName,
+  clearSessionCookie,
+} = require('./auth.cookies');
 
 
 async function login(req, res) {
@@ -54,7 +58,7 @@ async function login(req, res) {
         });
     }
     catch(error){
-        console.error("Erro no login administrativo:", error.message);
+        safeExceptionLog("admin_login", error);
 
         return res.status(500).json({
             message: "Não foi possível realizar o login."
@@ -92,7 +96,7 @@ async function changePassword(req, res) {
       data: result,
     });
   } catch (error) {
-    console.error("Erro ao alterar senha inicial:", error);
+    safeExceptionLog("admin_initial_password_change", error);
 
     return res.status(error.statusCode || 500).json({
       message:
@@ -125,7 +129,7 @@ async function logout(req, res) {
         });
     }
     catch(error){
-        console.error("Erro no logout:", error);
+        safeExceptionLog("admin_logout", error);
 
         return res.status(500).json({
             message: "Não foi possível realizar o logout.",
