@@ -28,21 +28,47 @@ const strongPasswordSchema = z
     "A senha precisa conter um caractere especial."
   );
 
+const unitIdsSchema = z
+  .array(
+    z
+      .string()
+      .uuid("Cada unidade precisa possuir um UUID válido.")
+  )
+  .min(1, "O usuário precisa possuir pelo menos uma unidade.")
+  .max(50, "Não é possível atribuir mais de 50 unidades.")
+  .transform((unitIds) => [...new Set(unitIds)]);
+
+
 const createUserSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(3, "O nome precisa ter pelo menos 3 caracteres.")
-    .max(150, "O nome pode ter no máximo 150 caracteres."),
+    .min(
+      3,
+      "O nome precisa ter pelo menos 3 caracteres."
+    )
+    .max(
+      150,
+      "O nome pode ter no máximo 150 caracteres."
+    ),
 
   email: z
     .string()
     .trim()
     .toLowerCase()
-    .email("Informe um e-mail válido.")
-    .max(191, "O e-mail pode ter no máximo 191 caracteres."),
+    .email(
+      "Informe um e-mail válido."
+    )
+    .max(
+      191,
+      "O e-mail pode ter no máximo 191 caracteres."
+    ),
 
-  roleIds: roleIdsSchema,
+  roleIds:
+    roleIdsSchema,
+
+  unitIds:
+    unitIdsSchema,
 });
 
 const updateUserSchema = z
@@ -112,18 +138,10 @@ const listUsersQuerySchema = z.object({
     .optional(),
 });
 
-const unitIdsSchema = z
-  .array(
-    z
-      .string()
-      .uuid("Cada unidade precisa possuir um UUID válido.")
-  )
-  .min(1, "O usuário precisa possuir pelo menos uma unidade.")
-  .max(50, "Não é possível atribuir mais de 50 unidades.")
-  .transform((unitIds) => [...new Set(unitIds)]);
-
-const replaceUserUnitsSchema = z.object({
-  unitIds: unitIdsSchema,
-});
+const replaceUserUnitsSchema =
+  z.object({
+    unitIds:
+      unitIdsSchema,
+  });
 
 module.exports = { userIdParamSchema, createUserSchema, updateUserSchema, replaceUserRolesSchema, changeUserStatusSchema, resetUserPasswordSchema, listUsersQuerySchema, replaceUserUnitsSchema};

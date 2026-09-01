@@ -1,5 +1,10 @@
 const {randomUUID,} = require("node:crypto");
 const prisma = require("../../database/prisma");
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const {encryptJson,decryptJson,} = require("../../security/crypto.service");
 const {assertUserCanReceiveReportAccess,} = require("../adminReportRestrictions/reportAccess.service");
 
@@ -444,8 +449,9 @@ async function createAccessGrant(
         },
       });
 
-      await tx.audit_logs.create({
-        data: {
+      await createScopedAuditLog(
+        tx,
+        {
           actor_type:
             "ADMIN",
 
@@ -477,8 +483,8 @@ async function createAccessGrant(
                   ?.toISOString() ??
                 null,
             }),
-        },
-      });
+        }
+      );
     }
   );
 
@@ -559,8 +565,9 @@ async function revokeAccessGrant(
         },
       });
 
-      await tx.audit_logs.create({
-        data: {
+      await createScopedAuditLog(
+        tx,
+        {
           actor_type:
             "ADMIN",
 
@@ -592,8 +599,8 @@ async function revokeAccessGrant(
               scope:
                 grant.scope,
             }),
-        },
-      });
+        }
+      );
     }
   );
 

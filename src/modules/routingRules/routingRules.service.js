@@ -4,7 +4,19 @@ const {
 
 const prisma =
     require("../../database/prisma");
-
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
+const {
+    isAdminMaster,
+    getActorUnitScope,
+    assertUnitIdsWithinActorScope,
+    assertUserWithinActorScope,
+} = require(
+    "../access/unitScope.service"
+);
 function serviceError(
     message,
     statusCode
@@ -17,7 +29,76 @@ function serviceError(
 
     return error;
 }
+async function assertRuleWithinActorScope(
+    actorUserId,
+    rule,
+    database = prisma
+) {
+    const scope =
+        await getActorUnitScope(
+            actorUserId,
+            database
+        );
 
+    if (
+        scope.isAdminMaster
+    ) {
+        return true;
+    }
+
+    /*
+     * Regra global também fica invisível
+     * para administrador regional.
+     */
+    if (
+        !rule.unit_id ||
+        !scope.unitIds.includes(
+            rule.unit_id
+        )
+    ) {
+        throw serviceError(
+            "Regra de roteamento não encontrada.",
+            404
+        );
+    }
+
+    return true;
+}
+
+
+async function assertRuleUnitAllowed(
+    actorUserId,
+    unitId,
+    database = prisma
+) {
+    const master =
+        await isAdminMaster(
+            actorUserId,
+            database
+        );
+
+    if (master) {
+        return true;
+    }
+
+    /*
+     * RH regional não cria regra global.
+     */
+    if (!unitId) {
+        throw serviceError(
+            "A regra precisa estar vinculada a uma das suas unidades.",
+            400
+        );
+    }
+
+    await assertUnitIdsWithinActorScope(
+        actorUserId,
+        [unitId],
+        database
+    );
+
+    return true;
+}
 function serializeRule(
     rule
 ) {
@@ -148,14 +229,21 @@ async function validateUnit(
             },
 
             select: {
-                id: true,
-                is_active: true,
+                id:
+                    true,
+
+                type:
+                    true,
+
+                is_active:
+                    true,
             },
         });
 
     if (
         !unit ||
-        !unit.is_active
+        !unit.is_active ||
+        unit.type !== "UNIT"
     ) {
         throw serviceError(
             "Unidade inválida ou inativa.",
@@ -163,7 +251,6 @@ async function validateUnit(
         );
     }
 }
-
 async function validateRole(
     roleId
 ) {
@@ -196,7 +283,9 @@ async function validateRole(
 }
 
 async function validateTargetUser(
-    userId
+    userId,
+    unitId,
+    actorUserId
 ) {
     if (!userId) {
         return;
@@ -210,8 +299,11 @@ async function validateTargetUser(
             },
 
             select: {
-                id: true,
-                is_active: true,
+                id:
+                    true,
+
+                is_active:
+                    true,
             },
         });
 
@@ -224,10 +316,59 @@ async function validateTargetUser(
             400
         );
     }
-}
 
+    /*
+     * Para gerente regional, usuário
+     * precisa estar no mesmo escopo.
+     */
+    if (actorUserId) {
+        await assertUserWithinActorScope(
+            actorUserId,
+            userId
+        );
+    }
+
+    /*
+     * ADMIN_MASTER como destino é
+     * considerado global.
+     */
+    const targetIsMaster =
+        await isAdminMaster(
+            userId
+        );
+
+    if (
+        unitId &&
+        !targetIsMaster
+    ) {
+        const assignment =
+            await prisma.user_units.findFirst({
+                where: {
+                    user_id:
+                        userId,
+
+                    unit_id:
+                        unitId,
+                },
+
+                select: {
+                    user_id:
+                        true,
+                },
+            });
+
+        if (!assignment) {
+            throw serviceError(
+                "O usuário de destino não pertence à unidade da regra.",
+                400
+            );
+        }
+    }
+}
 async function validateTargetTeam(
-    teamId
+    teamId,
+    unitId,
+    actorUserId
 ) {
     if (!teamId) {
         return null;
@@ -241,9 +382,14 @@ async function validateTargetTeam(
             },
 
             select: {
-                id: true,
-                is_active: true,
-                is_independent: true,
+                id:
+                    true,
+
+                is_active:
+                    true,
+
+                is_independent:
+                    true,
             },
         });
 
@@ -257,9 +403,86 @@ async function validateTargetTeam(
         );
     }
 
+    const teamUnits =
+        await prisma.team_units.findMany({
+            where: {
+                team_id:
+                    teamId,
+            },
+
+            select: {
+                unit_id:
+                    true,
+            },
+        });
+
+    /*
+     * Gerente regional só pode sequer
+     * utilizar equipes inteiramente
+     * contidas no próprio escopo.
+     */
+    if (actorUserId) {
+        const scope =
+            await getActorUnitScope(
+                actorUserId
+            );
+
+        if (
+            !scope.isAdminMaster
+        ) {
+            if (
+                teamUnits.length === 0
+            ) {
+                throw serviceError(
+                    "Equipe de destino não encontrada.",
+                    404
+                );
+            }
+
+            const actorUnits =
+                new Set(
+                    scope.unitIds
+                );
+
+            const fullyInside =
+                teamUnits.every(
+                    (item) =>
+                        actorUnits.has(
+                            item.unit_id
+                        )
+                );
+
+            if (!fullyInside) {
+                throw serviceError(
+                    "Equipe de destino não encontrada.",
+                    404
+                );
+            }
+        }
+    }
+
+    /*
+     * Se a regra é da M1, a equipe precisa
+     * possuir vínculo com a M1.
+     */
+    if (unitId) {
+        const belongsToUnit =
+            teamUnits.some(
+                (item) =>
+                    item.unit_id ===
+                    unitId
+            );
+
+        if (!belongsToUnit) {
+            throw serviceError(
+                "A equipe de destino não pertence à unidade da regra.",
+                400
+            );
+        }
+    }
+
     return team;
 }
-
 async function validateRestrictedRouting(
     restrictedRoleId,
     targetUserId,
@@ -313,9 +536,33 @@ async function validateRestrictedRouting(
      */
     if (targetTeamId) {
         const team =
-            await validateTargetTeam(
-                targetTeamId
-            );
+    await prisma.teams.findUnique({
+        where: {
+            id:
+                targetTeamId,
+        },
+
+        select: {
+            id:
+                true,
+
+            is_active:
+                true,
+
+            is_independent:
+                true,
+        },
+    });
+
+if (
+    !team ||
+    !team.is_active
+) {
+    throw serviceError(
+        "Equipe de destino inválida ou inativa.",
+        400
+    );
+}
 
         if (
             !team.is_independent
@@ -354,8 +601,13 @@ function validateActions(
 }
 
 async function validateReferences(
-    data
+    data,
+    actorUserId
 ) {
+    /*
+     * Primeiro validamos condições
+     * independentes.
+     */
     await Promise.all([
         validateCategory(
             data.categoryId
@@ -368,13 +620,28 @@ async function validateReferences(
         validateRole(
             data.restrictedRoleId
         ),
+    ]);
 
+    await assertRuleUnitAllowed(
+        actorUserId,
+        data.unitId
+    );
+
+    /*
+     * Destinos dependem da unidade
+     * escolhida para a regra.
+     */
+    await Promise.all([
         validateTargetUser(
-            data.targetUserId
+            data.targetUserId,
+            data.unitId,
+            actorUserId
         ),
 
         validateTargetTeam(
-            data.targetTeamId
+            data.targetTeamId,
+            data.unitId,
+            actorUserId
         ),
     ]);
 
@@ -385,15 +652,42 @@ async function validateReferences(
     );
 }
 
-async function listRoutingRules() {
+async function listRoutingRules(
+    actorUserId
+) {
+    const scope =
+        await getActorUnitScope(
+            actorUserId
+        );
+
+    if (
+        !scope.isAdminMaster &&
+        scope.unitIds.length === 0
+    ) {
+        return [];
+    }
+
+    const where =
+        scope.isAdminMaster
+            ? {}
+            : {
+                unit_id: {
+                    in:
+                        scope.unitIds,
+                },
+            };
+
     const rules =
         await prisma.routing_rules
             .findMany({
+                where,
+
                 orderBy: [
                     {
                         priority:
                             "asc",
                     },
+
                     {
                         created_at:
                             "asc",
@@ -407,12 +701,21 @@ async function listRoutingRules() {
 }
 
 async function getRoutingRule(
-    id
+    id,
+    actorUserId
 ) {
-    return serializeRule(
+    const rule =
         await findRuleOrFail(
             id
-        )
+        );
+
+    await assertRuleWithinActorScope(
+        actorUserId,
+        rule
+    );
+
+    return serializeRule(
+        rule
     );
 }
 
@@ -423,9 +726,9 @@ async function createRoutingRule(
     validateActions(data);
 
     await validateReferences(
-        data
-    );
-
+    data,
+    actorUserId
+);
     const rule =
         await prisma.$transaction(
             async (tx) => {
@@ -481,8 +784,9 @@ async function createRoutingRule(
                             },
                         });
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                         actor_type:
                             "ADMIN",
 
@@ -512,6 +816,9 @@ async function createRoutingRule(
                                 isActive:
                                     created.is_active,
 
+                                unitId:
+                                    created.unit_id,
+                                
                                 hasCategoryCondition:
                                     !!created.category_id,
 
@@ -530,8 +837,8 @@ async function createRoutingRule(
                                 setsPriority:
                                     !!created.set_priority,
                             }),
-                    },
-                });
+                    }
+                );
 
                 return created;
             }
@@ -551,7 +858,10 @@ async function updateRoutingRule(
         await findRuleOrFail(
             id
         );
-
+await assertRuleWithinActorScope(
+    actorUserId,
+    current
+);
     const merged = {
         name:
             patch.name ??
@@ -625,7 +935,8 @@ async function updateRoutingRule(
     );
 
     await validateReferences(
-        merged
+        merged,
+        actorUserId
     );
 
     const updated =
@@ -678,8 +989,9 @@ async function updateRoutingRule(
                             },
                         });
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                         actor_type:
                             "ADMIN",
 
@@ -705,12 +1017,20 @@ async function updateRoutingRule(
                             JSON.stringify({
                                 priority:
                                     rule.priority,
-
+                            
+                                unitId:
+                                    rule.unit_id,
+                                
                                 stopProcessing:
                                     rule.stop_processing,
                             }),
                     },
-                });
+                    current.unit_id
+                        ? [
+                            current.unit_id,
+                        ]
+                        : []
+                );
 
                 return rule;
             }
@@ -730,6 +1050,11 @@ async function changeRoutingRuleStatus(
         await findRuleOrFail(
             id
         );
+    
+    await assertRuleWithinActorScope(
+        actorUserId,
+        current
+    );
 
     if (
         current.is_active ===
@@ -757,8 +1082,9 @@ async function changeRoutingRuleStatus(
                             },
                         });
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                         actor_type:
                             "ADMIN",
 
@@ -784,10 +1110,12 @@ async function changeRoutingRuleStatus(
 
                         metadata_json:
                             JSON.stringify({
+                                unitId:
+                                    current.unit_id,
                                 isActive,
                             }),
-                    },
-                });
+                    }
+                );
 
                 return rule;
             }

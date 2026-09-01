@@ -8,6 +8,11 @@ const {
 );
 const prisma =
     require("../../database/prisma");
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 
 const {
     encryptJson,
@@ -318,6 +323,7 @@ async function targetUserIsSafe(
 
 async function targetTeamIsSafe(
     teamId,
+    reportUnitId,
     requiresIndependent
 ) {
     const team =
@@ -350,7 +356,29 @@ async function targetTeamIsSafe(
         return false;
     }
 
-    return true;
+    if (!reportUnitId) {
+        return false;
+    }
+
+    const assignment =
+        await prisma.team_units.findFirst({
+            where: {
+                team_id:
+                    teamId,
+
+                unit_id:
+                    reportUnitId,
+            },
+
+            select: {
+                team_id:
+                    true,
+            },
+        });
+
+    return Boolean(
+        assignment
+    );
 }
 
 async function buildRoutingPlan(
@@ -358,6 +386,7 @@ async function buildRoutingPlan(
     rules,
     restrictionContext
 ) {
+
     let targetUserId =
         null;
 
@@ -444,9 +473,8 @@ async function buildRoutingPlan(
                 const safe =
                     await targetTeamIsSafe(
                         rule.target_team_id,
-
-                        !!rule
-                            .restricted_role_id
+                        report.unit_id,
+                        !!rule.restricted_role_id
                     );
 
                 if (safe) {
@@ -649,6 +677,58 @@ async function applyRoutingPlan(
                     throw error;
                 }
             }
+            if (
+    plan.targetTeamId
+) {
+    const targetTeam =
+        await tx.teams.findUnique({
+            where: {
+                id:
+                    plan.targetTeamId,
+            },
+
+            select: {
+                is_active:
+                    true,
+            },
+        });
+
+    if (
+        !targetTeam ||
+        !targetTeam.is_active ||
+        !report.unit_id
+    ) {
+        throw serviceError(
+            "O destino tornou-se inválido durante o roteamento.",
+            409,
+            "ROUTING_TARGET_UNSAFE"
+        );
+    }
+
+    const teamUnit =
+        await tx.team_units.findFirst({
+            where: {
+                team_id:
+                    plan.targetTeamId,
+
+                unit_id:
+                    report.unit_id,
+            },
+
+            select: {
+                team_id:
+                    true,
+            },
+        });
+
+    if (!teamUnit) {
+        throw serviceError(
+            "O destino tornou-se inválido durante o roteamento.",
+            409,
+            "ROUTING_TARGET_UNSAFE"
+        );
+    }
+}
 
             const updateResult =
                 await tx.reports
@@ -981,8 +1061,9 @@ async function applyRoutingPlan(
                     });
             }
 
-            await tx.audit_logs.create({
-                data: {
+            await createScopedAuditLog(
+                tx,
+                {
                     actor_type:
                         "SYSTEM",
 
@@ -1020,8 +1101,8 @@ async function applyRoutingPlan(
 
                             priorityChanged,
                         }),
-                },
-            });
+                }
+            );
         }
     );
 

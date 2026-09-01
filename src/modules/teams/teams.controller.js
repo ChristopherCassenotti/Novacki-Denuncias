@@ -1,6 +1,6 @@
 const { safeExceptionLog } = require("../../utils/safeLog");
-const { teamIdParamSchema, createTeamSchema, updateTeamSchema, replaceMembersSchema, changeTeamStatusSchema } = require('./teams.schema');
-const { getTeamById, listTeams, createTeam, updateTeam, replaceTeamMembers, changeTeamStatus } = require('./teams.service');
+const { teamIdParamSchema, replaceTeamUnitsSchema, createTeamSchema, updateTeamSchema, replaceMembersSchema, changeTeamStatusSchema } = require('./teams.schema');
+const { getTeamById, listTeams, createTeam, updateTeam, replaceTeamMembers, replaceTeamUnits, changeTeamStatus } = require('./teams.service');
 
 function formatValidationErrors(error){
     return error.issues.map((issue) => ({
@@ -29,7 +29,10 @@ function sendControllerError(res, error, fallbackMessage){
 
 async function getTeams(req, res) {
     try{
-        const teams = await listTeams();
+        const teams =
+    await listTeams(
+        req.auth.userId
+    );
 
         return res.status(200).json({
             data:{
@@ -53,7 +56,11 @@ async function getTeam(req, res){
     }
 
     try{
-        const team = await getTeamById(validation.data.id);
+        const team =
+            await getTeamById(
+                validation.data.id,
+                req.auth.userId
+            );
 
         return res.status(200).json({
             data:{
@@ -203,5 +210,76 @@ async function changeStatusHandler(req, res) {
         return sendControllerError(res, error, 'Não foi possível alterar os status da equipe.');
     }
 }
+async function replaceUnitsHandler(
+    req,
+    res
+) {
+    const paramsValidation =
+        teamIdParamSchema.safeParse(
+            req.params
+        );
 
-module.exports = {getTeams, getTeam, createTeamHandler, updateTeamHandler, replaceMembersHandler, changeStatusHandler};
+    if (
+        !paramsValidation.success
+    ) {
+        return res
+            .status(400)
+            .json({
+                message:
+                    "ID de equipe inválido.",
+
+                errors:
+                    formatValidationErrors(
+                        paramsValidation.error
+                    ),
+            });
+    }
+
+    const bodyValidation =
+        replaceTeamUnitsSchema.safeParse(
+            req.body
+        );
+
+    if (
+        !bodyValidation.success
+    ) {
+        return res
+            .status(400)
+            .json({
+                message:
+                    "Unidades da equipe inválidas.",
+
+                errors:
+                    formatValidationErrors(
+                        bodyValidation.error
+                    ),
+            });
+    }
+
+    try {
+        const team =
+            await replaceTeamUnits(
+                paramsValidation.data.id,
+                bodyValidation.data.unitIds,
+                req.auth.userId
+            );
+
+        return res
+            .status(200)
+            .json({
+                message:
+                    "Unidades da equipe atualizadas com sucesso.",
+
+                data: {
+                    team,
+                },
+            });
+    } catch (error) {
+        return sendControllerError(
+            res,
+            error,
+            "Não foi possível atualizar as unidades da equipe."
+        );
+    }
+}
+module.exports = {getTeams, getTeam, createTeamHandler, replaceUnitsHandler, updateTeamHandler, replaceMembersHandler, changeStatusHandler};

@@ -8,7 +8,24 @@ const policyIdParamSchema =
                 "ID da política inválido."
             ),
     });
-
+const unitIdsSchema =
+    z
+        .array(
+            z
+                .string()
+                .uuid(
+                    "Cada unidade precisa possuir um UUID válido."
+                )
+        )
+        .max(
+            50,
+            "Não é possível vincular mais de 50 unidades."
+        )
+        .default([])
+        .transform(
+            (unitIds) =>
+                [...new Set(unitIds)]
+        );
 const createRetentionPolicySchema =
     z.object({
         name: z
@@ -29,6 +46,9 @@ const createRetentionPolicySchema =
                 "ARCHIVED",
             ]),
 
+        unitIds:
+            unitIdsSchema,
+        
         retentionDays: z.coerce
             .number()
             .int()
@@ -61,7 +81,9 @@ const updateRetentionPolicySchema =
             .uuid()
             .nullable()
             .optional(),
-
+        unitIds:
+            unitIdsSchema
+                .optional(),
         appliesToStatus: z
             .enum([
                 "CONCLUDED",

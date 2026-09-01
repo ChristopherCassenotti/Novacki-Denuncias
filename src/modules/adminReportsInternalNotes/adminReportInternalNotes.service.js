@@ -1,5 +1,10 @@
 const {randomUUID,} = require("node:crypto");
 const prisma = require("../../database/prisma");
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const { encryptJson, decryptJson,} = require("../../security/crypto.service");
 
 function createServiceError(message, statusCode) {
@@ -208,8 +213,9 @@ async function createInternalNote( reportId, { body, }, actorUserId) {
         },
       });
 
-      await tx.audit_logs.create({
-        data: {
+      await createScopedAuditLog(
+        tx,
+        {
           actor_type: "ADMIN",
           actor_user_id: actorUserId,
           action: "REPORT_INTERNAL_NOTE_ADDED",
@@ -221,8 +227,8 @@ async function createInternalNote( reportId, { body, }, actorUserId) {
             auditMetadata({
               noteId,
             }),
-        },
-      });
+        }
+      );
     }
   );
 

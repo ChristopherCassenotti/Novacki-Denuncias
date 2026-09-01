@@ -1,5 +1,10 @@
 const {randomUUID,} = require("node:crypto");
 const prisma = require("../../database/prisma");
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const {encryptJson,decryptJson,} = require("../../security/crypto.service");
 
 function createServiceError(message,statusCode) {
@@ -338,8 +343,9 @@ async function createRestriction(reportId, {userId, reason, notes,}, actorUserId
         },
       });
 
-      await tx.audit_logs.create({
-        data: {
+      await createScopedAuditLog(
+        tx,
+        {
           actor_type: "ADMIN",
           actor_user_id: actorUserId,
           action: "REPORT_USER_RESTRICTED",
@@ -353,8 +359,8 @@ async function createRestriction(reportId, {userId, reason, notes,}, actorUserId
 
               reason,
             }),
-        },
-      });
+        }
+      );
     }
   );
 
@@ -404,8 +410,9 @@ async function revokeRestriction(reportId, userId, actorUserId) {
         },
       });
 
-      await tx.audit_logs.create({
-        data: {
+      await createScopedAuditLog(
+        tx,
+        {
           actor_type: "ADMIN",
           actor_user_id: actorUserId,
           action: "REPORT_USER_RESTRICTION_REVOKED",
@@ -417,8 +424,8 @@ async function revokeRestriction(reportId, userId, actorUserId) {
             auditMetadata({
               userId,
             }),
-        },
-      });
+        }
+      );
     }
   );
 

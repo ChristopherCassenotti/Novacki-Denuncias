@@ -52,7 +52,9 @@ async function listRetentionPoliciesHandler(
 ) {
     try {
         const policies =
-            await listRetentionPolicies();
+            await listRetentionPolicies(
+    req.auth.userId
+)
 
         return res.status(200).json({
             data: {
@@ -87,8 +89,9 @@ async function getRetentionPolicyHandler(
     try {
         const policy =
             await getPolicyById(
-                validation.data.id
-            );
+    validation.data.id,
+    req.auth.userId
+)
 
         return res.status(200).json({
             data: {

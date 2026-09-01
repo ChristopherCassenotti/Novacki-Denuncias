@@ -7,6 +7,12 @@ const prisma =
     require("../../database/prisma");
 
 const {
+    getActorUnitScope,
+} = require(
+    "../access/unitScope.service"
+);
+
+const {
     encryptJson,
 } = require(
     "../../security/crypto.service"
@@ -57,18 +63,30 @@ async function findReportOrFail(
                 id: reportId,
             },
 
-            select: {
-                id: true,
-                category_id: true,
-                status: true,
+select: {
+    id: true,
 
-                concluded_at: true,
-                archived_at: true,
+    unit_id:
+        true,
 
-                retention_until: true,
+    category_id:
+        true,
 
-                legal_hold: true,
-            },
+    status:
+        true,
+
+    concluded_at:
+        true,
+
+    archived_at:
+        true,
+
+    retention_until:
+        true,
+
+    legal_hold:
+        true,
+},
         });
 
     if (!report) {
@@ -106,10 +124,90 @@ async function findApplicablePolicy(
     report
 ) {
     /*
-     * Primeiro procuramos uma política
-     * específica da categoria.
+     * 1. Unidade + categoria específica
      */
-    const specific =
+    if (
+        report.unit_id
+    ) {
+        const unitCategoryPolicy =
+            await database
+                .retention_policies
+                .findFirst({
+                    where: {
+                        category_id:
+                            report.category_id,
+
+                        applies_to_status:
+                            report.status,
+
+                        is_active:
+                            true,
+
+                        retention_policy_units: {
+                            some: {
+                                unit_id:
+                                    report.unit_id,
+                            },
+                        },
+                    },
+
+                    orderBy: {
+                        updated_at:
+                            "desc",
+                    },
+                });
+
+        if (
+            unitCategoryPolicy
+        ) {
+            return unitCategoryPolicy;
+        }
+
+        /*
+         * 2. Unidade + todas as categorias
+         */
+        const unitGlobalCategoryPolicy =
+            await database
+                .retention_policies
+                .findFirst({
+                    where: {
+                        category_id:
+                            null,
+
+                        applies_to_status:
+                            report.status,
+
+                        is_active:
+                            true,
+
+                        retention_policy_units: {
+                            some: {
+                                unit_id:
+                                    report.unit_id,
+                            },
+                        },
+                    },
+
+                    orderBy: {
+                        updated_at:
+                            "desc",
+                    },
+                });
+
+        if (
+            unitGlobalCategoryPolicy
+        ) {
+            return unitGlobalCategoryPolicy;
+        }
+    }
+
+    /*
+     * 3. Regra global + categoria específica
+     *
+     * Nenhuma linha em retention_policy_units
+     * significa política global.
+     */
+    const globalCategoryPolicy =
         await database
             .retention_policies
             .findFirst({
@@ -120,7 +218,12 @@ async function findApplicablePolicy(
                     applies_to_status:
                         report.status,
 
-                    is_active: true,
+                    is_active:
+                        true,
+
+                    retention_policy_units: {
+                        none: {},
+                    },
                 },
 
                 orderBy: {
@@ -129,24 +232,31 @@ async function findApplicablePolicy(
                 },
             });
 
-    if (specific) {
-        return specific;
+    if (
+        globalCategoryPolicy
+    ) {
+        return globalCategoryPolicy;
     }
 
     /*
-     * Se não houver específica,
-     * usamos a global.
+     * 4. Global + todas as categorias
      */
     return database
         .retention_policies
         .findFirst({
             where: {
-                category_id: null,
+                category_id:
+                    null,
 
                 applies_to_status:
                     report.status,
 
-                is_active: true,
+                is_active:
+                    true,
+
+                retention_policy_units: {
+                    none: {},
+                },
             },
 
             orderBy: {
@@ -155,7 +265,6 @@ async function findApplicablePolicy(
             },
         });
 }
-
 async function scheduleRetentionForReport(
     reportId
 ) {
@@ -511,6 +620,7 @@ async function scheduleRetentionForReport(
 
 async function scheduleRetentionBatch({
     limit = 100,
+    actorUserId = null,
 } = {}) {
     const pageSize =
         Number.isInteger(limit)
@@ -531,18 +641,43 @@ async function scheduleRetentionBatch({
         errors: [],
     };
 
-    /*
-     * Busca denúncias encerradas.
-     *
-     * Mesmo as que já têm retention_until
-     * entram, porque a função individual
-     * é idempotente e consegue detectar
-     * agendamento existente.
-    */
+    let scopedUnitIds =
+        null;
+
+    if (actorUserId) {
+        const scope =
+            await getActorUnitScope(
+                actorUserId
+            );
+
+        if (
+            !scope.isAdminMaster
+        ) {
+            scopedUnitIds =
+                scope.unitIds;
+
+            if (
+                scopedUnitIds.length ===
+                0
+            ) {
+                return result;
+            }
+        }
+    }
+
     do {
         const reports =
             await prisma.reports.findMany({
             where: {
+                ...(scopedUnitIds
+                    ? {
+                        unit_id: {
+                            in:
+                                scopedUnitIds,
+                        },
+                    }
+                    : {}),
+
                 status: {
                     in: [
                         "CONCLUDED",

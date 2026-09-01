@@ -53,6 +53,13 @@ test("scheduler percorre todas as páginas de denúncias elegíveis", async () =
       throw new Error("não deveria criptografar sem política");
     },
   });
+  mockModule("../../src/modules/access/unitScope.service", {
+    getActorUnitScope: async () => ({
+      isAdminMaster: true,
+      unitIds: [],
+    }),
+    assertUnitIdsWithinActorScope: async () => true,
+  });
   const service = require(servicePath);
 
   const result = await service.scheduleRetentionBatch({ limit: 2 });
@@ -62,8 +69,73 @@ test("scheduler percorre todas as páginas de denúncias elegíveis", async () =
   assert.equal(result.failed, 0);
   assert.equal(pageQueries.length, 3);
   assert.equal(pageQueries[0].take, 2);
+  assert.equal(pageQueries[0].where.unit_id, undefined);
   assert.equal(pageQueries[1].cursor.id, "report-b");
   assert.equal(pageQueries[2].cursor.id, "report-c");
+});
+
+test("scheduler respeita o escopo regional do ator", async () => {
+  const servicePath = require.resolve(
+    "../../src/modules/retentionScheduler/retentionScheduler.service"
+  );
+  const pageQueries = [];
+  const prisma = {
+    reports: {
+      findMany: async (query) => {
+        pageQueries.push(query);
+        return [];
+      },
+    },
+  };
+
+  delete require.cache[servicePath];
+  mockModule("../../src/database/prisma", prisma);
+  mockModule("../../src/security/crypto.service", {
+    encryptJson: () => null,
+  });
+  mockModule("../../src/modules/access/unitScope.service", {
+    getActorUnitScope: async (actorUserId) => {
+      if (actorUserId === "master-user") {
+        return {
+          isAdminMaster: true,
+          unitIds: [],
+        };
+      }
+
+      return {
+        isAdminMaster: false,
+        unitIds:
+          actorUserId === "regional-user"
+            ? ["unit-a", "unit-b"]
+            : [],
+      };
+    },
+  });
+  const service = require(servicePath);
+
+  await service.scheduleRetentionBatch({
+    actorUserId: "master-user",
+  });
+  await service.scheduleRetentionBatch({
+    actorUserId: "regional-user",
+  });
+  const emptyScopeResult =
+    await service.scheduleRetentionBatch({
+      actorUserId: "regional-without-units",
+    });
+
+  assert.equal(pageQueries.length, 2);
+  assert.equal(pageQueries[0].where.unit_id, undefined);
+  assert.deepEqual(
+    pageQueries[1].where.unit_id,
+    {
+      in: ["unit-a", "unit-b"],
+    }
+  );
+  assert.equal(emptyScopeResult.processed, 0);
+  assert.equal(emptyScopeResult.scheduled, 0);
+  assert.equal(emptyScopeResult.skipped, 0);
+  assert.equal(emptyScopeResult.failed, 0);
 });
 
 test("política verifica conflito dentro de transação serializável", async () => {
@@ -75,13 +147,18 @@ test("política verifica conflito dentro de transação serializável", async ()
   let transactionOptions;
   const transaction = {
     retention_policies: {
-      findFirst: async () => {
+      findMany: async () => {
         conflictChecks += 1;
-        return { id: "concurrent-policy", name: "Concorrente" };
+        return [
+          { id: "concurrent-policy", name: "Concorrente" },
+        ];
       },
       create: async () => {
         creates += 1;
       },
+    },
+    retention_policy_units: {
+      findMany: async () => [],
     },
   };
   const prisma = {
@@ -94,6 +171,13 @@ test("política verifica conflito dentro de transação serializável", async ()
 
   delete require.cache[servicePath];
   mockModule("../../src/database/prisma", prisma);
+  mockModule("../../src/modules/access/unitScope.service", {
+    getActorUnitScope: async () => ({
+      isAdminMaster: true,
+      unitIds: [],
+    }),
+    assertUnitIdsWithinActorScope: async () => true,
+  });
   const service = require(servicePath);
 
   await assert.rejects(

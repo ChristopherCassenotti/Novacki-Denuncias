@@ -67,10 +67,11 @@ async function listAuditLogsHandler(
     }
 
     try {
-        const result =
-            await listAuditLogs(
-                validation.data
-            );
+const result =
+    await listAuditLogs(
+        validation.data,
+        req.auth.userId
+    );
 
         return res.status(200).json({
             data:
@@ -103,11 +104,10 @@ async function getAuditLogHandler(
 
     try {
         const log =
-            await getAuditLogById(
-                validation
-                    .data
-                    .id
-            );
+    await getAuditLogById(
+        validation.data.id,
+        req.auth.userId
+    );
 
         return res.status(200).json({
             data: {

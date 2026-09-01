@@ -8,17 +8,148 @@ const bcrypt = require("bcryptjs");
 
 const prisma = require("../../database/prisma");
 const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
+const {
   assertActorCanAssignRoles,
   assertActorCanManageUser,
 } = require("../../security/privilege.policy");
-
+const {
+  isAdminMaster,
+  getScopedUserIds,
+  assertUnitIdsWithinActorScope,
+  assertUserWithinActorScope,
+  assertAdminMaster,
+} = require(
+  "../access/unitScope.service"
+);
 function createServiceError(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
 
   return error;
 }
+const REGIONAL_ASSIGNABLE_ROLE_CODES =
+  new Set([
+    "RH_UNIDADE",
+    "RH_UNIDADE_USUARIO",
+  ]);
 
+async function assertRolesAllowedForActor(
+  database,
+  actorUserId,
+  roleIds
+) {
+  const master =
+    await isAdminMaster(
+      actorUserId,
+      database
+    );
+
+  /*
+   * ADMIN_MASTER continua usando a
+   * política global de privilégios.
+   */
+  if (master) {
+    return true;
+  }
+
+  /*
+   * RH regional usa exatamente um perfil:
+   * RH normal OU responsável.
+   */
+  if (roleIds.length !== 1) {
+    throw createServiceError(
+      "Selecione apenas um perfil de RH para o usuário.",
+      400
+    );
+  }
+
+  const roles =
+    await database.roles.findMany({
+      where: {
+        id: {
+          in: roleIds,
+        },
+
+        is_active: true,
+      },
+
+      select: {
+        id: true,
+        code: true,
+      },
+    });
+
+  if (
+    roles.length !==
+    roleIds.length
+  ) {
+    throw createServiceError(
+      "Um ou mais perfis são inválidos.",
+      400
+    );
+  }
+
+  const invalid =
+    roles.some(
+      (role) =>
+        !REGIONAL_ASSIGNABLE_ROLE_CODES
+          .has(role.code)
+    );
+
+  if (invalid) {
+    throw createServiceError(
+      "Você só pode atribuir perfis de RH da unidade.",
+      403
+    );
+  }
+
+  return true;
+}
+
+async function listAssignableRoles(
+  actorUserId
+) {
+  const master =
+    await isAdminMaster(
+      actorUserId
+    );
+
+  const where =
+    master
+      ? {
+          is_active: true,
+        }
+      : {
+          is_active: true,
+
+          code: {
+            in: [
+              "RH_UNIDADE",
+              "RH_UNIDADE_USUARIO",
+            ],
+          },
+        };
+
+  return prisma.roles.findMany({
+    where,
+
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      description: true,
+      is_active: true,
+    },
+
+    orderBy: {
+      name: "asc",
+    },
+  });
+}
 async function validateUnitIds(database, unitIds = []) {
   const uniqueUnitIds = [...new Set(unitIds)];
 
@@ -271,29 +402,71 @@ async function attachRolesToUsers(users) {
   }));
 }
 
-async function getUserById(userId) {
-  const user = await findUserOrFail(
-    prisma,
-    userId
-  );
+async function getUserById(
+  userId,
+  actorUserId = null
+) {
+  if (actorUserId) {
+    await assertUserWithinActorScope(
+      actorUserId,
+      userId
+    );
+  }
+
+  const user =
+    await findUserOrFail(
+      prisma,
+      userId
+    );
 
   const [userWithRoles] =
-    await attachRolesToUsers([user]);
-  
-    const [userWithRolesAndUnits] =
-    await attachUnitsToUsers([userWithRoles]);
-  
-    return userWithRolesAndUnits;
+    await attachRolesToUsers([
+      user,
+    ]);
+
+  const [
+    userWithRolesAndUnits,
+  ] =
+    await attachUnitsToUsers([
+      userWithRoles,
+    ]);
+
+  return userWithRolesAndUnits;
 }
 
-async function listUsers({
-  page,
-  limit,
-  search,
-  isActive,
-  roleId,
-}) {
+async function listUsers(
+  {
+    page,
+    limit,
+    search,
+    isActive,
+    roleId,
+  },
+  actorUserId
+) {
   const where = {};
+  
+  let candidateUserIds =
+  await getScopedUserIds(
+    actorUserId
+  );
+
+  function intersectIds(
+    current,
+    next
+  ) {
+    if (current === null) {
+      return [...new Set(next)];
+    }
+
+    const nextSet =
+      new Set(next);
+
+    return current.filter(
+      (id) =>
+        nextSet.has(id)
+    );
+  }
 
   let filteredUserIds = null;
   if (search) {
@@ -327,6 +500,12 @@ async function listUsers({
     filteredUserIds = matchedUsers.map(
       (user) => user.id
     );
+
+    candidateUserIds =
+      intersectIds(
+        candidateUserIds,
+        filteredUserIds
+      );
   }
 
   if (isActive !== undefined) {
@@ -348,10 +527,11 @@ async function listUsers({
       (assignment) => assignment.user_id
     );
 
-    if (filteredUserIds !== null) {
-      const searchMatches = new Set(filteredUserIds);
-      userIds = userIds.filter((userId) => searchMatches.has(userId));
-    }
+    candidateUserIds =
+      intersectIds(
+        candidateUserIds,
+        userIds
+      );
 
     if (userIds.length === 0) {
       return {
@@ -368,12 +548,33 @@ async function listUsers({
     where.id = {
       in: userIds,
     };
-  } else if (filteredUserIds !== null) {
-    where.id = {
-      in: filteredUserIds,
+  } 
+
+  if (
+  candidateUserIds !==
+  null
+) {
+  if (
+    candidateUserIds.length ===
+    0
+  ) {
+    return {
+      users: [],
+
+      pagination: {
+        page,
+        limit,
+        total: 0,
+        totalPages: 0,
+      },
     };
   }
 
+  where.id = {
+    in:
+      candidateUserIds,
+  };
+}
   const skip = (page - 1) * limit;
 
   const [total, users] = await Promise.all([
@@ -429,6 +630,7 @@ async function createUser(
     name,
     email,
     roleIds,
+    unitIds,
   },
   actorUserId
 ) {
@@ -465,7 +667,23 @@ async function createUser(
         tx,
         roleIds
       );
-
+    const validUnitIds =
+      await validateUnitIds(
+        tx,
+        unitIds
+      );
+    
+    await assertUnitIdsWithinActorScope(
+      actorUserId,
+      validUnitIds,
+      tx
+    );
+    
+    await assertRolesAllowedForActor(
+      tx,
+      actorUserId,
+      validRoleIds
+    );
     await assertActorCanAssignRoles(
       tx,
       actorUserId,
@@ -490,7 +708,21 @@ async function createUser(
       })),
       skipDuplicates: true,
     });
+await tx.user_units.createMany({
+  data:
+    validUnitIds.map(
+      (unitId) => ({
+        user_id:
+          userId,
 
+        unit_id:
+          unitId,
+      })
+    ),
+
+  skipDuplicates:
+    true,
+});
     await tx.user_one_time_tokens.create({
       data: {
         id: randomUUID(),
@@ -501,8 +733,9 @@ async function createUser(
       },
     });
 
-    await tx.audit_logs.create({
-      data: {
+    await createScopedAuditLog(
+      tx,
+      {
         actor_type: "ADMIN",
         actor_user_id: actorUserId,
         action: "USER_CREATED",
@@ -510,16 +743,16 @@ async function createUser(
         entity_id: userId,
         success: true,
         request_id: randomUUID(),
-
         metadata_json:
           serializeAuditMetadata({
             name,
             email,
             roleIds: validRoleIds,
+            unitIds: validUnitIds,
             credentialFlow: "ONE_TIME_USER_INVITATION",
           }),
-      },
-    });
+      }
+    );
   });
 
   return {
@@ -541,6 +774,10 @@ async function updateUser(
   },
   actorUserId
 ) {
+  await assertUserWithinActorScope(
+  actorUserId,
+  userId
+);
   const currentUser =
     await findUserOrFail(
       prisma,
@@ -596,8 +833,9 @@ async function updateUser(
       data: updateData,
     });
 
-    await tx.audit_logs.create({
-      data: {
+    await createScopedAuditLog(
+      tx,
+      {
         actor_type: "ADMIN",
         actor_user_id: actorUserId,
         action: "USER_UPDATED",
@@ -618,8 +856,8 @@ async function updateUser(
 
             current: updateData,
           }),
-      },
-    });
+      }
+    );
   });
 
   return getUserById(userId);
@@ -630,6 +868,10 @@ async function replaceUserRoles(
   roleIds,
   actorUserId
 ) {
+  await assertUserWithinActorScope(
+  actorUserId,
+  userId
+);
   await findUserOrFail(
     prisma,
     userId
@@ -654,7 +896,11 @@ async function replaceUserRoles(
         tx,
         roleIds
       );
-
+await assertRolesAllowedForActor(
+  tx,
+  actorUserId,
+  validRoleIds
+);
     await assertActorCanAssignRoles(
       tx,
       actorUserId,
@@ -700,8 +946,9 @@ async function replaceUserRoles(
       },
     });
 
-    await tx.audit_logs.create({
-      data: {
+    await createScopedAuditLog(
+      tx,
+      {
         actor_type: "ADMIN",
         actor_user_id: actorUserId,
         action: "USER_ROLES_REPLACED",
@@ -715,8 +962,8 @@ async function replaceUserRoles(
             previousRoleIds,
             currentRoleIds: validRoleIds,
           }),
-      },
-    });
+      }
+    );
   });
 
   return getUserById(userId);
@@ -727,6 +974,10 @@ async function changeUserStatus(
   isActive,
   actorUserId
 ) {
+  await assertUserWithinActorScope(
+  actorUserId,
+  userId
+);
   const currentUser =
     await findUserOrFail(
       prisma,
@@ -779,8 +1030,9 @@ async function changeUserStatus(
       });
     }
 
-    await tx.audit_logs.create({
-      data: {
+    await createScopedAuditLog(
+      tx,
+      {
         actor_type: "ADMIN",
         actor_user_id: actorUserId,
         action: isActive
@@ -798,8 +1050,8 @@ async function changeUserStatus(
             currentStatus:
               isActive,
           }),
-      },
-    });
+      }
+    );
   });
 
   return getUserById(userId);
@@ -809,6 +1061,10 @@ async function resetUserPassword(
   userId,
   actorUserId
 ) {
+  await assertUserWithinActorScope(
+  actorUserId,
+  userId
+);
   await findUserOrFail(
     prisma,
     userId
@@ -875,8 +1131,9 @@ async function resetUserPassword(
       },
     });
 
-    await tx.audit_logs.create({
-      data: {
+    await createScopedAuditLog(
+      tx,
+      {
         actor_type: "ADMIN",
         actor_user_id: actorUserId,
         action: "USER_PASSWORD_RESET",
@@ -890,8 +1147,8 @@ async function resetUserPassword(
             credentialFlow: "ONE_TIME_PASSWORD_RESET",
             sessionsRevoked: true,
           }),
-      },
-    });
+      }
+    );
   });
 
   return {
@@ -996,6 +1253,9 @@ async function replaceUserUnits(
   unitIds,
   actorUserId
 ) {
+  await assertAdminMaster(
+  actorUserId
+);
   await findUserOrFail(
     prisma,
     userId
@@ -1050,8 +1310,9 @@ async function replaceUserUnits(
       skipDuplicates: true,
     });
 
-    await tx.audit_logs.create({
-      data: {
+    await createScopedAuditLog(
+      tx,
+      {
         actor_type: "ADMIN",
         actor_user_id: actorUserId,
         action: "USER_UNITS_REPLACED",
@@ -1066,7 +1327,8 @@ async function replaceUserUnits(
             currentUnitIds: validUnitIds,
           }),
       },
-    });
+      previousUnitIds
+    );
   });
 
   return getUserById(userId);
@@ -1075,6 +1337,7 @@ async function replaceUserUnits(
 module.exports = {
   getUserById,
   listUsers,
+  listAssignableRoles,
   createUser,
   updateUser,
   replaceUserRoles,

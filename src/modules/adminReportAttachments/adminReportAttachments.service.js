@@ -5,6 +5,11 @@ const {
 
 const prisma =
     require("../../database/prisma");
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const { safeExceptionLog } = require("../../utils/safeLog");
 const { validateAttachmentFile } = require("../../security/attachmentValidation.service");
 
@@ -357,8 +362,9 @@ async function createAttachment(
                     },
                 });
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                         actor_type:
                             "ADMIN",
 
@@ -392,8 +398,8 @@ async function createAttachment(
 
                                 visibility,
                             }),
-                    },
-                });
+                    }
+                );
             }
         );
     } catch (error) {
@@ -592,8 +598,9 @@ async function prepareAttachmentDownload(
             attachment
         );
 
-    await prisma.audit_logs.create({
-        data: {
+    await createScopedAuditLog(
+        prisma,
+        {
             actor_type:
                 "ADMIN",
 
@@ -620,8 +627,8 @@ async function prepareAttachmentDownload(
                     attachmentId:
                         attachment.id,
                 }),
-        },
-    });
+        }
+    );
 
     return {
         body:

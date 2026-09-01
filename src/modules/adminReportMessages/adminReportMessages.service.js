@@ -1,5 +1,10 @@
 const { randomUUID } = require('node:crypto');
 const prisma = require('../../database/prisma');
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const { encryptJson, decryptJson } = require('../../security/crypto.service');
 
 function createServiceError(message, statusCode){
@@ -226,8 +231,9 @@ async function createAdminMessage(reportId, {type, body}, actorUserId) {
             },
         });
 
-        await tx.audit_logs.create({
-            data:{
+        await createScopedAuditLog(
+            tx,
+            {
                 actor_type: 'ADMIN',
                 actor_user_id: actorUserId,
                 action: 'REPORT_MESSAGE_SENT',
@@ -239,8 +245,8 @@ async function createAdminMessage(reportId, {type, body}, actorUserId) {
                     messageId,
                     messageType: type,
                 }),
-            },
-        });
+            }
+        );
     });
 
     const message = await prisma.report_messages.findUnique({

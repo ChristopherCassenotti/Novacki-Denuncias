@@ -7,19 +7,20 @@ datasource db {
 }
 
 model audit_logs {
-  id            BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
-  actor_type    audit_logs_actor_type
-  actor_user_id String?               @db.Char(36)
-  action        String                @db.VarChar(120)
-  entity_type   String                @db.VarChar(80)
-  entity_id     String?               @db.VarChar(80)
-  success       Boolean
-  request_id    String?               @db.VarChar(80)
-  ip_hash       Bytes?                @db.Binary(32)
-  user_agent    String?               @db.VarChar(500)
-  metadata_json String?               @db.LongText
-  created_at    DateTime              @default(now())
-  users         users?                @relation(fields: [actor_user_id], references: [id], onUpdate: Restrict, map: "fk_audit_actor_user")
+  id              BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  actor_type      audit_logs_actor_type
+  actor_user_id   String?               @db.Char(36)
+  action          String                @db.VarChar(120)
+  entity_type     String                @db.VarChar(80)
+  entity_id       String?               @db.VarChar(80)
+  success         Boolean
+  request_id      String?               @db.VarChar(80)
+  ip_hash         Bytes?                @db.Binary(32)
+  user_agent      String?               @db.VarChar(500)
+  metadata_json   String?               @db.LongText
+  created_at      DateTime              @default(now())
+  audit_log_units audit_log_units[]
+  users           users?                @relation(fields: [actor_user_id], references: [id], onUpdate: Restrict, map: "fk_audit_actor_user")
 
   @@index([action, created_at], map: "idx_audit_action_date")
   @@index([actor_user_id, created_at], map: "idx_audit_actor_date")
@@ -383,6 +384,7 @@ model retention_policies {
   updated_at                  DateTime                              @default(now())
   report_retention_executions report_retention_executions[]
   report_categories           report_categories?                    @relation(fields: [category_id], references: [id], onUpdate: Restrict, map: "fk_retention_category")
+  retention_policy_units      retention_policy_units[]
 
   @@index([is_active], map: "idx_retention_active")
   @@index([category_id, applies_to_status], map: "idx_retention_category_status")
@@ -483,25 +485,29 @@ model teams {
   reports            reports[]
   routing_rules      routing_rules[]
   team_members       team_members[]
+  team_units         team_units[]
 
   @@index([is_active], map: "idx_teams_active")
 }
 
 model units {
-  id                 String          @id @db.Char(36)
-  parent_id          String?         @db.Char(36)
-  code               String          @unique(map: "uq_units_code") @db.VarChar(80)
-  name               String          @db.VarChar(150)
-  type               units_type
-  is_active          Boolean         @default(true)
-  created_at         DateTime        @default(now())
-  updated_at         DateTime        @default(now())
-  notification_email String?         @db.VarChar(255)
-  reports            reports[]
-  routing_rules      routing_rules[]
-  units              units?          @relation("unitsTounits", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_units_parent")
-  other_units        units[]         @relation("unitsTounits")
-  user_units         user_units[]
+  id                     String                   @id @db.Char(36)
+  parent_id              String?                  @db.Char(36)
+  code                   String                   @unique(map: "uq_units_code") @db.VarChar(80)
+  name                   String                   @db.VarChar(150)
+  type                   units_type
+  is_active              Boolean                  @default(true)
+  created_at             DateTime                 @default(now())
+  updated_at             DateTime                 @default(now())
+  notification_email     String?                  @db.VarChar(255)
+  audit_log_units        audit_log_units[]
+  reports                reports[]
+  retention_policy_units retention_policy_units[]
+  routing_rules          routing_rules[]
+  team_units             team_units[]
+  units                  units?                   @relation("unitsTounits", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_units_parent")
+  other_units            units[]                  @relation("unitsTounits")
+  user_units             user_units[]
 
   @@index([parent_id], map: "idx_units_parent")
   @@index([type, is_active], map: "idx_units_type_active")
@@ -660,6 +666,39 @@ model user_units {
 
   @@id([user_id, unit_id])
   @@index([unit_id], map: "idx_user_units_unit")
+}
+
+model team_units {
+  team_id    String   @db.Char(36)
+  unit_id    String   @db.Char(36)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  teams      teams    @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_team_units_team")
+  units      units    @relation(fields: [unit_id], references: [id], onUpdate: Restrict, map: "fk_team_units_unit")
+
+  @@id([team_id, unit_id])
+  @@index([unit_id], map: "idx_team_units_unit")
+}
+
+model audit_log_units {
+  audit_log_id BigInt     @db.UnsignedBigInt
+  unit_id      String     @db.Char(36)
+  created_at   DateTime   @default(now()) @db.DateTime(0)
+  audit_logs   audit_logs @relation(fields: [audit_log_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_audit_log_units_log")
+  units        units      @relation(fields: [unit_id], references: [id], onUpdate: Restrict, map: "fk_audit_log_units_unit")
+
+  @@id([audit_log_id, unit_id])
+  @@index([unit_id, audit_log_id], map: "idx_audit_log_units_unit_log")
+}
+
+model retention_policy_units {
+  policy_id          String             @db.Char(36)
+  unit_id            String             @db.Char(36)
+  created_at         DateTime           @default(now()) @db.DateTime(0)
+  retention_policies retention_policies @relation(fields: [policy_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_retention_policy_units_policy")
+  units              units              @relation(fields: [unit_id], references: [id], onUpdate: Restrict, map: "fk_retention_policy_units_unit")
+
+  @@id([policy_id, unit_id])
+  @@index([unit_id, policy_id], map: "idx_retention_policy_units_unit")
 }
 
 enum audit_logs_actor_type {

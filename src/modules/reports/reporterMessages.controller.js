@@ -2,6 +2,7 @@ const { createReporterMessageSchema, } = require("./reporterMessages.schema");
 const { listReporterMessages, createReporterMessage, } = require("./reporterMessages.service");
 const { getReporterHistory, } = require("./reporterHistory.service");
 const { safeExceptionLog } = require("../../utils/safeLog");
+const {notifyNewReporterMessageSafely,} = require("../notifications/notificationEmail.service");
 
 function formatValidationErrors(error){
     return error.issues.map((issue)=>({
@@ -50,6 +51,8 @@ async function createMessageHandler(req, res) {
     try{
         const message = await createReporterMessage(req.reporterAuth.reportId, validation.data.body);
 
+        await notifyNewReporterMessageSafely(req.reporterAuth.reportId);
+        
         return res.status(201).json({
             message: 'Mensagem enviada com sucesso.',
 

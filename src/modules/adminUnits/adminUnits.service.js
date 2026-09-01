@@ -6,7 +6,18 @@ const prisma =
     require(
         "../../database/prisma"
     );
-
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
+const {
+    getActorUnitScope,
+    assertUnitWithinActorScope,
+    assertAdminMaster,
+} = require(
+    "../access/unitScope.service"
+);
 function serviceError(
     message,
     statusCode
@@ -157,13 +168,38 @@ async function assertCodeAvailable(
     }
 }
 
-async function listUnits() {
+async function listUnits(
+    actorUserId
+) {
+    const scope =
+        await getActorUnitScope(
+            actorUserId
+        );
+
+    if (
+        !scope.isAdminMaster &&
+        scope.unitIds.length === 0
+    ) {
+        return [];
+    }
+
+    const where = {
+        type:
+            "UNIT",
+    };
+
+    if (
+        !scope.isAdminMaster
+    ) {
+        where.id = {
+            in:
+                scope.unitIds,
+        };
+    }
+
     const units =
         await prisma.units.findMany({
-            where: {
-                type:
-                    "UNIT",
-            },
+            where,
 
             orderBy: {
                 name:
@@ -177,8 +213,14 @@ async function listUnits() {
 }
 
 async function getUnit(
-    id
+    id,
+    actorUserId
 ) {
+    await assertUnitWithinActorScope(
+        actorUserId,
+        id
+    );
+
     return serializeUnit(
         await findUnitOrFail(
             id
@@ -190,6 +232,9 @@ async function createUnit(
     data,
     actorUserId
 ) {
+        await assertAdminMaster(
+        actorUserId
+    );
     const code =
         buildUnitCode(
             data.name
@@ -242,8 +287,9 @@ async function createUnit(
                         },
                     });
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                         actor_type:
                             "ADMIN",
 
@@ -276,8 +322,8 @@ async function createUnit(
                                 isActive:
                                     true,
                             }),
-                    },
-                });
+                    }
+                );
 
                 return unit;
             }
@@ -293,6 +339,10 @@ async function updateUnit(
     patch,
     actorUserId
 ) {
+        await assertUnitWithinActorScope(
+        actorUserId,
+        id
+    );
     const updated =
         await prisma.$transaction(
             async (tx) => {
@@ -347,8 +397,9 @@ async function updateUnit(
                         },
                     });
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                         actor_type:
                             "ADMIN",
 
@@ -382,8 +433,8 @@ async function updateUnit(
                                     current.notification_email !==
                                     unit.notification_email,
                             }),
-                    },
-                });
+                    }
+                );
 
                 return unit;
             }
@@ -399,6 +450,9 @@ async function changeUnitStatus(
     isActive,
     actorUserId
 ) {
+        await assertAdminMaster(
+        actorUserId
+    );
     const updated =
         await prisma.$transaction(
             async (tx) => {
@@ -430,8 +484,9 @@ async function changeUnitStatus(
                         },
                     });
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                         actor_type:
                             "ADMIN",
 
@@ -459,8 +514,8 @@ async function changeUnitStatus(
                             JSON.stringify({
                                 isActive,
                             }),
-                    },
-                });
+                    }
+                );
 
                 return unit;
             }

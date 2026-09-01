@@ -8,6 +8,11 @@ const prisma =
     require(
         "../../database/prisma"
     );
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const { safeExceptionLog } = require("../../utils/safeLog");
 
 const {
@@ -284,8 +289,9 @@ async function applyLegalHold(
                 },
             });
 
-            await tx.audit_logs.create({
-                data: {
+            await createScopedAuditLog(
+                tx,
+                {
                     actor_type:
                         "ADMIN",
 
@@ -320,8 +326,8 @@ async function applyLegalHold(
                             current:
                                 true,
                         }),
-                },
-            });
+                }
+            );
         }
     );
 
@@ -419,8 +425,9 @@ async function releaseLegalHold(
                 },
             });
 
-            await tx.audit_logs.create({
-                data: {
+            await createScopedAuditLog(
+                tx,
+                {
                     actor_type:
                         "ADMIN",
 
@@ -450,8 +457,8 @@ async function releaseLegalHold(
                             current:
                                 false,
                         }),
-                },
-            });
+                }
+            );
         }
     );
     try {

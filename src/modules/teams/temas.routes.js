@@ -1,4 +1,4 @@
-const {  getTeams, getTeam, createTeamHandler, updateTeamHandler, replaceMembersHandler, changeStatusHandler, } = require('./teams.controller');
+const {  getTeams, getTeam, createTeamHandler,replaceUnitsHandler, updateTeamHandler, replaceMembersHandler, changeStatusHandler, } = require('./teams.controller');
 const { requireAdminAuth } = require('../auth/auth.middleware');
 const { requireTrustedOrigin } = require('../../middlewares/originProtection.middleware');
 const { requirePermissions } = require('../access/access.middleware');
@@ -20,5 +20,6 @@ router.patch('/:id', updateTeamHandler);
 router.patch('/:id/status', changeStatusHandler);
 
 router.put('/:id/members', replaceMembersHandler);
+router.put("/:id/units",replaceUnitsHandler);
 
 module.exports = router;

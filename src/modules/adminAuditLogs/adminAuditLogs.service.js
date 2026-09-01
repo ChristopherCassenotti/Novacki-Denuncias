@@ -3,6 +3,13 @@ const prisma =
         "../../database/prisma"
     );
 
+const {
+    getActorUnitScope,
+} = require(
+    "../access/unitScope.service"
+);
+
+
 function createServiceError(
     message,
     statusCode
@@ -16,6 +23,7 @@ function createServiceError(
     return error;
 }
 
+
 function normalizeMetadata(
     value
 ) {
@@ -26,11 +34,6 @@ function normalizeMetadata(
         return null;
     }
 
-    /*
-     * Dependendo da introspecção atual
-     * do Prisma, metadata_json pode
-     * chegar como objeto ou string.
-     */
     if (
         typeof value ===
         "object"
@@ -54,59 +57,46 @@ function normalizeMetadata(
     return null;
 }
 
-function serializeAuditLog(
-    log,
-    actor = null
-) {
-    return {
-        /*
-         * BigInt não pode ser enviado
-         * diretamente por JSON.stringify.
-         */
-        id:
-            log.id.toString(),
 
-        actorType:
-            log.actor_type,
+const auditLogSelect = {
+    id:
+        true,
 
-        actor:
-            actor
-                ? {
-                    id:
-                        actor.id,
+    actor_type:
+        true,
 
-                    name:
-                        actor.name,
+    actor_user_id:
+        true,
 
-                    email:
-                        actor.email,
-                }
-                : null,
+    action:
+        true,
 
-        action:
-            log.action,
+    entity_type:
+        true,
 
-        entityType:
-            log.entity_type,
+    entity_id:
+        true,
 
-        entityId:
-            log.entity_id,
+    success:
+        true,
 
-        success:
-            log.success,
+    request_id:
+        true,
 
-        requestId:
-            log.request_id,
+    metadata_json:
+        true,
 
-        metadata:
-            normalizeMetadata(
-                log.metadata_json
-            ),
+    created_at:
+        true,
 
-        createdAt:
-            log.created_at,
-    };
-}
+    audit_log_units: {
+        select: {
+            unit_id:
+                true,
+        },
+    },
+};
+
 
 async function attachActors(
     logs
@@ -136,9 +126,14 @@ async function attachActors(
             },
 
             select: {
-                id: true,
-                name: true,
-                email: true,
+                id:
+                    true,
+
+                name:
+                    true,
+
+                email:
+                    true,
             },
         });
 
@@ -151,6 +146,193 @@ async function attachActors(
         )
     );
 }
+
+
+async function attachUnits(
+    logs
+) {
+    const unitIds = [
+        ...new Set(
+            logs.flatMap(
+                (log) =>
+                    (
+                        log.audit_log_units ??
+                        []
+                    ).map(
+                        (item) =>
+                            item.unit_id
+                    )
+            )
+        ),
+    ];
+
+    if (!unitIds.length) {
+        return new Map();
+    }
+
+    const units =
+        await prisma.units.findMany({
+            where: {
+                id: {
+                    in:
+                        unitIds,
+                },
+            },
+
+            select: {
+                id:
+                    true,
+
+                code:
+                    true,
+
+                name:
+                    true,
+            },
+        });
+
+    return new Map(
+        units.map(
+            (unit) => [
+                unit.id,
+                unit,
+            ]
+        )
+    );
+}
+
+
+function serializeAuditLog(
+    log,
+    actor,
+    unitMap,
+    preferredUnitIds = []
+) {
+    const units =
+        (
+            log.audit_log_units ??
+            []
+        )
+            .map(
+                (assignment) =>
+                    unitMap.get(
+                        assignment.unit_id
+                    )
+            )
+            .filter(Boolean)
+            .map(
+                (unit) => ({
+                    id:
+                        unit.id,
+
+                    code:
+                        unit.code,
+
+                    name:
+                        unit.name,
+                })
+            )
+            .sort(
+                (a, b) =>
+                    a.name.localeCompare(
+                        b.name,
+                        "pt-BR"
+                    )
+            );
+
+    const preferredSet =
+        new Set(
+            preferredUnitIds
+        );
+
+    /*
+     * Isso é importante em movimentos.
+     *
+     * Exemplo:
+     * M1 -> Monte Mor
+     *
+     * O mesmo log pode estar associado
+     * às duas unidades, mas para Neide
+     * mostramos M1; para Monte Mor,
+     * mostramos Monte Mor.
+     */
+    const displayUnit =
+        units.find(
+            (unit) =>
+                preferredSet.has(
+                    unit.id
+                )
+        ) ??
+        units[0] ??
+        null;
+
+    return {
+        id:
+            log.id.toString(),
+
+        actorType:
+            log.actor_type,
+
+        actor:
+            actor
+                ? {
+                    id:
+                        actor.id,
+
+                    name:
+                        actor.name,
+
+                    email:
+                        actor.email,
+                }
+                : null,
+
+        actorId:
+            actor?.id ??
+            null,
+
+        actorName:
+            actor?.name ??
+            null,
+
+        action:
+            log.action,
+
+        entityType:
+            log.entity_type,
+
+        entityId:
+            log.entity_id,
+
+        success:
+            log.success,
+
+        requestId:
+            log.request_id,
+
+        metadata:
+            normalizeMetadata(
+                log.metadata_json
+            ),
+
+        /*
+         * O frontend atual usa "unit"
+         * singular.
+         */
+        unit:
+            displayUnit,
+
+        /*
+         * E já retornamos todas para
+         * deixar o contrato preparado.
+         */
+        units,
+
+        createdAt:
+            log.created_at,
+    };
+}
+
 
 function buildWhere({
     actorUserId,
@@ -222,15 +404,123 @@ function buildWhere({
     return where;
 }
 
-async function listAuditLogs({
+
+function emptyResult(
     page,
-    limit,
-    ...filters
-}) {
+    limit
+) {
+    return {
+        logs:
+            [],
+
+        pagination: {
+            page,
+            limit,
+            total:
+                0,
+
+            totalPages:
+                0,
+        },
+    };
+}
+
+
+async function listAuditLogs(
+    {
+        page,
+        limit,
+        unitId,
+        ...filters
+    },
+    actorUserId
+) {
+    const scope =
+        await getActorUnitScope(
+            actorUserId
+        );
+
     const where =
         buildWhere(
             filters
         );
+
+    let preferredUnitIds =
+        [];
+
+    if (
+        scope.isAdminMaster
+    ) {
+        /*
+         * Master pode ver logs globais.
+         * Se filtrar por unidade,
+         * mostramos só logs daquela
+         * unidade.
+         */
+        if (unitId) {
+            where.audit_log_units = {
+                some: {
+                    unit_id:
+                        unitId,
+                },
+            };
+
+            preferredUnitIds = [
+                unitId,
+            ];
+        }
+    } else {
+        /*
+         * Usuário regional sem unidade
+         * não recebe auditoria alguma.
+         */
+        if (
+            scope.unitIds.length ===
+            0
+        ) {
+            return emptyResult(
+                page,
+                limit
+            );
+        }
+
+        let effectiveUnitIds =
+            scope.unitIds;
+
+        if (unitId) {
+            /*
+             * Não revelamos se outra
+             * unidade existe.
+             * Apenas retornamos vazio.
+             */
+            if (
+                !scope.unitIds.includes(
+                    unitId
+                )
+            ) {
+                return emptyResult(
+                    page,
+                    limit
+                );
+            }
+
+            effectiveUnitIds = [
+                unitId,
+            ];
+        }
+
+        where.audit_log_units = {
+            some: {
+                unit_id: {
+                    in:
+                        effectiveUnitIds,
+                },
+            },
+        };
+
+        preferredUnitIds =
+            effectiveUnitIds;
+    }
 
     const skip =
         (page - 1) *
@@ -253,48 +543,36 @@ async function listAuditLogs({
                 take:
                     limit,
 
-                select: {
-                    id: true,
+                select:
+                    auditLogSelect,
 
-                    actor_type:
-                        true,
+                orderBy: [
+                    {
+                        created_at:
+                            "desc",
+                    },
 
-                    actor_user_id:
-                        true,
-
-                    action:
-                        true,
-
-                    entity_type:
-                        true,
-
-                    entity_id:
-                        true,
-
-                    success:
-                        true,
-
-                    request_id:
-                        true,
-
-                    metadata_json:
-                        true,
-
-                    created_at:
-                        true,
-                },
-
-                orderBy: {
-                    created_at:
-                        "desc",
-                },
+                    {
+                        id:
+                            "desc",
+                    },
+                ],
             }),
         ]);
 
-    const actors =
-        await attachActors(
-            logs
-        );
+    const [
+        actors,
+        unitMap,
+    ] =
+        await Promise.all([
+            attachActors(
+                logs
+            ),
+
+            attachUnits(
+                logs
+            ),
+        ]);
 
     return {
         logs:
@@ -302,11 +580,17 @@ async function listAuditLogs({
                 (log) =>
                     serializeAuditLog(
                         log,
+
                         log.actor_user_id
                             ? actors.get(
                                 log.actor_user_id
-                            ) || null
-                            : null
+                            ) ??
+                            null
+                            : null,
+
+                        unitMap,
+
+                        preferredUnitIds
                     )
             ),
 
@@ -326,52 +610,63 @@ async function listAuditLogs({
     };
 }
 
+
 async function getAuditLogById(
-    id
+    id,
+    actorUserId
 ) {
-    /*
-     * Prisma usa BigInt aqui.
-     */
+    const scope =
+        await getActorUnitScope(
+            actorUserId
+        );
+
     const auditId =
         BigInt(id);
 
+    const where = {
+        id:
+            auditId,
+    };
+
+    let preferredUnitIds =
+        [];
+
+    if (
+        !scope.isAdminMaster
+    ) {
+        if (
+            scope.unitIds.length ===
+            0
+        ) {
+            throw createServiceError(
+                "Registro de auditoria não encontrado.",
+                404
+            );
+        }
+
+        where.audit_log_units = {
+            some: {
+                unit_id: {
+                    in:
+                        scope.unitIds,
+                },
+            },
+        };
+
+        preferredUnitIds =
+            scope.unitIds;
+    }
+
+    /*
+     * findFirst porque estamos combinando
+     * ID + escopo regional.
+     */
     const log =
-        await prisma.audit_logs.findUnique({
-            where: {
-                id:
-                    auditId,
-            },
+        await prisma.audit_logs.findFirst({
+            where,
 
-            select: {
-                id: true,
-
-                actor_type:
-                    true,
-
-                actor_user_id:
-                    true,
-
-                action:
-                    true,
-
-                entity_type:
-                    true,
-
-                entity_id:
-                    true,
-
-                success:
-                    true,
-
-                request_id:
-                    true,
-
-                metadata_json:
-                    true,
-
-                created_at:
-                    true,
-            },
+            select:
+                auditLogSelect,
         });
 
     if (!log) {
@@ -381,32 +676,36 @@ async function getAuditLogById(
         );
     }
 
-    let actor =
-        null;
+    const [
+        actors,
+        unitMap,
+    ] =
+        await Promise.all([
+            attachActors([
+                log,
+            ]),
 
-    if (
+            attachUnits([
+                log,
+            ]),
+        ]);
+
+    const actor =
         log.actor_user_id
-    ) {
-        actor =
-            await prisma.users.findUnique({
-                where: {
-                    id:
-                        log.actor_user_id,
-                },
-
-                select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                },
-            });
-    }
+            ? actors.get(
+                log.actor_user_id
+            ) ??
+            null
+            : null;
 
     return serializeAuditLog(
         log,
-        actor
+        actor,
+        unitMap,
+        preferredUnitIds
     );
 }
+
 
 module.exports = {
     listAuditLogs,

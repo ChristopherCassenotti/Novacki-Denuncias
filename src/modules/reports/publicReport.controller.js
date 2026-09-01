@@ -1,6 +1,7 @@
 const { createPublicReportSchema } = require('./publicReport.schema');
 const { createPublicReport } = require('./publicReport.service');
 const { safeExceptionLog } = require('../../utils/safeLog');
+const {notifyNewReportSafely,} = require("../notifications/notificationEmail.service");
 
 function formatValidationErrors(error){
     return error.issues.map((issue) => ({
@@ -21,6 +22,8 @@ async function createPublicReportHandler(req, res) {
 
     try{
         const result = await createPublicReport(validation.data);
+
+        await notifyNewReportSafely(result.reportId);
 
         return res.status(201).json({
             message: 'Denúncia registrada com sucesso.',

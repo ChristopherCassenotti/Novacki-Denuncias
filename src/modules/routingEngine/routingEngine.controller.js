@@ -4,12 +4,20 @@ const {
 } = require(
     "./routingEngine.service"
 );
-
+const {
+    assertUserCanAccessReport,
+} = require(
+    "../adminReportRestrictions/reportAccess.service"
+);
 async function runHandler(
     req,
     res
 ) {
     try {
+        await assertUserCanAccessReport(
+            req.params.id,
+            req.auth.userId
+        );
         const result =
             await routeReport(
                 req.params.id,

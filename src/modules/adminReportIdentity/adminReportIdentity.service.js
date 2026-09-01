@@ -1,5 +1,10 @@
 const {randomUUID,} = require("node:crypto");
 const prisma = require("../../database/prisma");
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const {decryptJson,} = require("../../security/crypto.service");
 
 function createServiceError(message, statusCode) {
@@ -71,8 +76,9 @@ async function getReportIdentity(reportId, actorUserId) {
       "REPORT_IDENTITY"
     );
 
-  await prisma.audit_logs.create({
-    data: {
+  await createScopedAuditLog(
+    prisma,
+    {
       actor_type: "ADMIN",
       actor_user_id: actorUserId,
       action: "REPORT_IDENTITY_VIEWED",
@@ -84,8 +90,8 @@ async function getReportIdentity(reportId, actorUserId) {
         auditMetadata({
           identityId: identity.id,
         }),
-    },
-  });
+    }
+  );
 
   return {
     name: decrypted.name ?? null,

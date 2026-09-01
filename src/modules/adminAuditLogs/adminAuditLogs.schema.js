@@ -33,7 +33,12 @@ const auditLogsQuerySchema =
             .min(1)
             .max(80)
             .optional(),
-
+        unitId: z
+            .string()
+            .uuid(
+                "O ID da unidade precisa ser um UUID válido."
+            )
+            .optional(),
         entityId: z
             .string()
             .trim()

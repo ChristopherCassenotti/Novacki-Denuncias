@@ -9,8 +9,8 @@ const router =express.Router();
 router.use(requireAdminAuth);
 router.use(requireTrustedOrigin);
 
-router.get("/",requirePermissions("AUDIT_LOG_VIEW"),listAuditLogsHandler);
+router.get("/",requirePermissions("AUDIT_VIEW"),listAuditLogsHandler);
 
-router.get("/:id",requirePermissions("AUDIT_LOG_VIEW"),getAuditLogHandler);
+router.get("/:id",requirePermissions("AUDIT_VIEW"),getAuditLogHandler);
 
 module.exports = router;

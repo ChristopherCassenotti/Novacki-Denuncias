@@ -1,4 +1,9 @@
 const prisma = require('../../database/prisma');
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const { decryptJson, encryptJson } = require('../../security/crypto.service');
 const { randomUUID } = require('node:crypto');
 const { getReportListAccess, buildReportListAccessWhere } = require('../access/reportCapability.service');
@@ -432,8 +437,9 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
             },
         });
 
-        await tx.audit_logs.create({
-            data:{
+        await createScopedAuditLog(
+            tx,
+            {
                 actor_type: 'ADMIN',
                 actor_user_id: actorUserId,
                 action: 'REPORT_STATUS_CHANGED',
@@ -445,8 +451,8 @@ async function updateReportStatus(reportId, {status, expectedVersion}, actorUser
                     previousStatus: current.status,
                     newStatus: status,
                 }),
-            },
-        });
+            }
+        );
     });
     try {
         if (
@@ -535,8 +541,9 @@ async function updateReportPriority(reportId, {priority}, actorUserId) {
             },
         });
 
-        await tx.audit_logs.create({
-            data:{
+        await createScopedAuditLog(
+            tx,
+            {
                 actor_type: 'ADMIN',
                 actor_user_id: actorUserId,
                 action: 'REPORT_PRIORITY_CHANGED',
@@ -548,8 +555,8 @@ async function updateReportPriority(reportId, {priority}, actorUserId) {
                     previousPriority: current.priority,
                     newPriority: priority,
                 }),
-            },
-        });
+            }
+        );
     });
 
     return getAdminReport(reportId);
@@ -835,8 +842,9 @@ async function assignReport(
       /*
        * Auditoria administrativa.
        */
-      await tx.audit_logs.create({
-        data: {
+      await createScopedAuditLog(
+        tx,
+        {
           actor_type:
             "ADMIN",
 
@@ -863,8 +871,8 @@ async function assignReport(
               targetType,
               targetId,
             }),
-        },
-      });
+        }
+      );
     }
   );
 
@@ -930,8 +938,9 @@ async function unassignReport(reportId, actorUserId) {
             },
         });
 
-        await tx.audit_logs.create({
-            data:{
+        await createScopedAuditLog(
+            tx,
+            {
                 actor_type: 'ADMIN',
                 actor_user_id: actorUserId,
                 action: 'REPORT_UNASSIGNED',
@@ -940,8 +949,8 @@ async function unassignReport(reportId, actorUserId) {
                 success: true,
                 request_id: randomUUID(),
                 metadata_json: null,
-            },
-        });
+            }
+        );
     });
     
     return getAdminReport(reportId);

@@ -1,6 +1,6 @@
 const { safeExceptionLog } = require("../../utils/safeLog");
 const { replaceUserUnitsSchema, userIdParamSchema, createUserSchema, updateUserSchema, replaceUserRolesSchema, changeUserStatusSchema, resetUserPasswordSchema, listUsersQuerySchema, } = require("./users.schema");
-const { getUserById, listUsers, createUser: createUserService, updateUser: updateUserService, replaceUserRoles, changeUserStatus, resetUserPassword, replaceUserUnits,} = require("./users.service");
+const { getUserById, listAssignableRoles, listUsers, createUser: createUserService, updateUser: updateUserService, replaceUserRoles, changeUserStatus, resetUserPassword, replaceUserUnits,} = require("./users.service");
 
 function formatValidationErrors(error){
     return error.issues.map((issue) => ({
@@ -41,7 +41,11 @@ async function getUsers(req, res) {
     }
 
     try{
-        const result = await listUsers(validation.data);
+        const result =
+  await listUsers(
+    validation.data,
+    req.auth.userId
+  );
 
         return res.status(200).json({
             data:result,
@@ -64,7 +68,11 @@ async function getUser(req, res) {
     }
 
     try{
-        const user = await getUserById(validation.data.id);
+        const user =
+  await getUserById(
+    validation.data.id,
+    req.auth.userId
+  );
 
         return res.status(200).json({
             data:{
@@ -75,6 +83,32 @@ async function getUser(req, res) {
     catch(error){
         return sendControllerError(res, error, 'Não foi possível consultar o usuário.');
     }
+}
+
+async function getAssignableRoles(
+  req,
+  res
+) {
+  try {
+    const roles =
+      await listAssignableRoles(
+        req.auth.userId
+      );
+
+    return res
+      .status(200)
+      .json({
+        data: {
+          roles,
+        },
+      });
+  } catch (error) {
+    return sendControllerError(
+      res,
+      error,
+      "Não foi possível listar os perfis permitidos."
+    );
+  }
 }
 
 async function createUserHandler(req, res) {
@@ -320,4 +354,4 @@ async function replaceUnitsHandler(req, res) {
     );
   }
 }
-module.exports = { getUser, getUsers, createUserHandler, updateUserHandler, replaceRolesHandler, changeStatusHandler, resetPasswordHandler, replaceUnitsHandler };
+module.exports = { getUser, getUsers, getAssignableRoles,  createUserHandler, updateUserHandler, replaceRolesHandler, changeStatusHandler, resetPasswordHandler, replaceUnitsHandler };

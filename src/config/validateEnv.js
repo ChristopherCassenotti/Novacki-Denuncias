@@ -97,6 +97,50 @@ R2_PURGE_RETRY_MAX_MS:
         .int()
         .min(60000)
         .default(3600000),
+
+        EMAIL_NOTIFICATIONS_ENABLED:
+    z.enum([
+        "true",
+        "false",
+    ]).default("false"),
+
+SMTP_HOST:
+    z.string()
+        .min(1)
+        .optional(),
+
+SMTP_PORT:
+    z.coerce
+        .number()
+        .int()
+        .positive()
+        .optional(),
+
+SMTP_SECURE:
+    z.enum([
+        "true",
+        "false",
+    ]).default("true"),
+
+SMTP_USER:
+    z.string()
+        .min(1)
+        .optional(),
+
+SMTP_PASS:
+    z.string()
+        .min(1)
+        .optional(),
+
+SMTP_FROM:
+    z.string()
+        .min(3)
+        .optional(),
+
+ADMIN_PANEL_URL:
+    z.string()
+        .url()
+        .optional(),
 });
 
 function validateEnv() {
@@ -173,6 +217,72 @@ function validateEnv() {
         process.exit(1);
     }
 
+    if (
+    env.EMAIL_NOTIFICATIONS_ENABLED ===
+    "true"
+) {
+    const requiredEmailFields = [
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_PASS",
+        "SMTP_FROM",
+        "ADMIN_PANEL_URL",
+    ];
+
+    const missingFields =
+        requiredEmailFields.filter(
+            (field) =>
+                env[field] ===
+                    undefined ||
+                env[field] ===
+                    null ||
+                env[field] ===
+                    ""
+        );
+
+    if (
+        missingFields.length >
+        0
+    ) {
+        safeErrorLog({
+            level:
+                "error",
+
+            context:
+                "email_environment_validation",
+
+            missingFields,
+        });
+
+        process.exit(1);
+    }
+
+    if (
+        env.NODE_ENV ===
+        "production"
+    ) {
+        const panelUrl =
+            new URL(
+                env.ADMIN_PANEL_URL
+            );
+
+        if (
+            panelUrl.protocol !==
+            "https:"
+        ) {
+            safeErrorLog({
+                level:
+                    "error",
+
+                context:
+                    "admin_panel_https_validation",
+            });
+
+            process.exit(1);
+        }
+    }
+    }
     return env;
 }
 

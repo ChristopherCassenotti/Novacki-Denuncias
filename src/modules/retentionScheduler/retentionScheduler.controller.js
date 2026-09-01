@@ -5,7 +5,16 @@ const {
 } = require(
     "./retentionScheduler.service"
 );
-
+const {
+    assertUserCanAccessReport,
+} = require(
+    "../adminReportRestrictions/reportAccess.service"
+);
+const {
+    getActorUnitScope,
+} = require(
+    "../access/unitScope.service"
+);
 const {
     reportIdParamSchema,
 } = require(
@@ -58,8 +67,9 @@ async function scheduleReportHandler(
 
     try {
         const result =
-            await scheduleRetentionForReport(
-                validation.data.id
+            await assertUserCanAccessReport(
+                validation.data.id,
+                req.auth.userId
             );
 
         return res.status(200).json({
@@ -80,10 +90,14 @@ async function runRetentionSchedulerHandler(
     res
 ) {
     try {
-        const result =
-            await scheduleRetentionBatch({
-                limit: 100,
-            });
+const result =
+    await scheduleRetentionBatch({
+        limit:
+            100,
+
+        actorUserId:
+            req.auth.userId,
+    });
 
         return res.status(200).json({
             message:

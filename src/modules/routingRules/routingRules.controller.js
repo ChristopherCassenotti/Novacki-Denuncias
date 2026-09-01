@@ -64,7 +64,9 @@ async function listHandler(
     try {
         return res.json({
             data:
-                await listRoutingRules(),
+                await listRoutingRules(
+    req.auth.userId
+),
         });
     } catch (error) {
         return handleError(
@@ -95,8 +97,9 @@ async function getHandler(
         return res.json({
             data:
                 await getRoutingRule(
-                    validation.data.id
-                ),
+    validation.data.id,
+    req.auth.userId
+),
         });
     } catch (error) {
         return handleError(
