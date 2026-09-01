@@ -17,14 +17,12 @@ router.use(
     requireAdminAuth
 );
 
-router.use(
-    requireTrustedOrigin
-);
+router.use(requireTrustedOrigin);
 
 router.post(
     "/reports/:id/run",
     requirePermissions(
-        "ROUTING_RULE_MANAGE"
+        "ROUTING_MANAGE"
     ),
     runHandler
 );

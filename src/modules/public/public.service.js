@@ -25,6 +25,7 @@ async function listPublicUnits() {
         await prisma.units.findMany({
             where:{
                 is_active: true,
+                type: "UNIT",
             },
 
             select:{

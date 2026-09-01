@@ -1,17 +1,7 @@
-const {
-  randomUUID,
-} = require("node:crypto");
-
-const prisma = require(
-  "../../database/prisma"
-);
-
-const {
-  encryptJson,
-  decryptJson,
-} = require(
-  "../../security/crypto.service"
-);
+const {randomUUID,} = require("node:crypto");
+const prisma = require("../../database/prisma");
+const {encryptJson,decryptJson,} = require("../../security/crypto.service");
+const {assertUserCanReceiveReportAccess,} = require("../adminReportRestrictions/reportAccess.service");
 
 function createServiceError(
   message,
@@ -251,6 +241,11 @@ async function createAccessGrant(
       400
     );
   }
+
+  await assertUserCanReceiveReportAccess(
+    reportId,
+    userId
+  );
 
   const restriction =
     await prisma.report_restricted_users.findFirst({

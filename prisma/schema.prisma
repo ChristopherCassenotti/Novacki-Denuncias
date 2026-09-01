@@ -488,18 +488,20 @@ model teams {
 }
 
 model units {
-  id            String          @id @db.Char(36)
-  parent_id     String?         @db.Char(36)
-  code          String          @unique(map: "uq_units_code") @db.VarChar(80)
-  name          String          @db.VarChar(150)
-  type          units_type
-  is_active     Boolean         @default(true)
-  created_at    DateTime        @default(now())
-  updated_at    DateTime        @default(now())
-  reports       reports[]
-  routing_rules routing_rules[]
-  units         units?          @relation("unitsTounits", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_units_parent")
-  other_units   units[]         @relation("unitsTounits")
+  id                 String          @id @db.Char(36)
+  parent_id          String?         @db.Char(36)
+  code               String          @unique(map: "uq_units_code") @db.VarChar(80)
+  name               String          @db.VarChar(150)
+  type               units_type
+  is_active          Boolean         @default(true)
+  created_at         DateTime        @default(now())
+  updated_at         DateTime        @default(now())
+  notification_email String?         @db.VarChar(255)
+  reports            reports[]
+  routing_rules      routing_rules[]
+  units              units?          @relation("unitsTounits", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_units_parent")
+  other_units        units[]         @relation("unitsTounits")
+  user_units         user_units[]
 
   @@index([parent_id], map: "idx_units_parent")
   @@index([type, is_active], map: "idx_units_type_active")
@@ -611,6 +613,7 @@ model users {
   user_recovery_codes                                                       user_recovery_codes[]
   user_roles                                                                user_roles[]
   user_sessions                                                             user_sessions[]
+  user_units                                                                user_units[]
 
   @@index([is_active], map: "idx_users_active")
 }
@@ -646,6 +649,17 @@ model anonymized_report_statistics {
   @@unique([period_month, category_id], map: "uq_anonymized_stats_month_category")
   @@index([period_month], map: "idx_anonymized_stats_period")
   @@index([category_id], map: "idx_anonymized_stats_category")
+}
+
+model user_units {
+  user_id    String   @db.Char(36)
+  unit_id    String   @db.Char(36)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  units      units    @relation(fields: [unit_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_user_units_unit")
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_user_units_user")
+
+  @@id([user_id, unit_id])
+  @@index([unit_id], map: "idx_user_units_unit")
 }
 
 enum audit_logs_actor_type {

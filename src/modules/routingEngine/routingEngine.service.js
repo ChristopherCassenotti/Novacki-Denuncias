@@ -1,7 +1,11 @@
 const {
     randomUUID,
 } = require("node:crypto");
-
+const {
+    assertUserCanReceiveReportAccess,
+} = require(
+    "../adminReportRestrictions/reportAccess.service"
+);
 const prisma =
     require("../../database/prisma");
 
@@ -252,8 +256,13 @@ function strongerPriority(
 
 async function targetUserIsSafe(
     userId,
+    reportId,
     restrictionContext
 ) {
+    /*
+     * Restrição individual continua
+     * vencendo qualquer outra regra.
+     */
     if (
         restrictionContext
             .restrictedUserIds
@@ -265,20 +274,46 @@ async function targetUserIsSafe(
     const user =
         await prisma.users.findUnique({
             where: {
-                id:
-                    userId,
+                id: userId,
             },
 
             select: {
-                is_active:
-                    true,
+                is_active: true,
             },
         });
 
-    return (
-        !!user &&
-        user.is_active
-    );
+    if (
+        !user ||
+        !user.is_active
+    ) {
+        return false;
+    }
+
+    /*
+     * Aqui entra a segregação por unidade.
+     *
+     * Usuário comum precisa pertencer
+     * à unidade da denúncia.
+     *
+     * ADMIN_MASTER continua permitido.
+     */
+    try {
+        await assertUserCanReceiveReportAccess(
+            reportId,
+            userId
+        );
+
+        return true;
+    } catch (error) {
+        if (
+            error.statusCode === 403 ||
+            error.statusCode === 409
+        ) {
+            return false;
+        }
+
+        throw error;
+    }
 }
 
 async function targetTeamIsSafe(
@@ -382,11 +417,12 @@ async function buildRoutingPlan(
             if (
                 rule.target_user_id
             ) {
-                const safe =
-                    await targetUserIsSafe(
-                        rule.target_user_id,
-                        restrictionContext
-                    );
+            const safe =
+                await targetUserIsSafe(
+                    rule.target_user_id,
+                    report.id,
+                    restrictionContext
+                );
 
                 if (safe) {
                     targetUserId =
@@ -565,51 +601,55 @@ async function applyRoutingPlan(
 
     await prisma.$transaction(
         async (tx) => {
-            /*
-             * Revalidação importantíssima:
-             * um usuário pode ter sido
-             * restringido entre o cálculo
-             * e a gravação.
-             */
             if (
                 plan.targetUserId
             ) {
-                const restriction =
-                    await tx
-                        .report_restricted_users
-                        .findFirst({
-                            where: {
-                                report_id:
-                                    report.id,
+                const targetUser =
+                    await tx.users.findUnique({
+                        where: {
+                            id:
+                                plan.targetUserId,
+                        },
 
-                                user_id:
-                                    plan
-                                        .targetUserId,
+                        select: {
+                            is_active:
+                                true,
+                        },
+                    });
 
-                                is_active:
-                                    true,
-                            },
-
-                            select: {
-                                id: true,
-                            },
-                        });
-
-                if (restriction) {
+                if (
+                    !targetUser ||
+                    !targetUser.is_active
+                ) {
                     throw serviceError(
-                        "O destino tornou-se restrito durante o roteamento.",
+                        "O destino tornou-se inválido durante o roteamento.",
                         409,
-                        "ROUTING_TARGET_RESTRICTED"
+                        "ROUTING_TARGET_UNSAFE"
                     );
+                }
+
+                try {
+                    await assertUserCanReceiveReportAccess(
+                        report.id,
+                        plan.targetUserId,
+                        tx
+                    );
+                } catch (error) {
+                    if (
+                        error.statusCode === 403 ||
+                        error.statusCode === 409
+                    ) {
+                        throw serviceError(
+                            "O destino tornou-se inválido durante o roteamento.",
+                            409,
+                            "ROUTING_TARGET_UNSAFE"
+                        );
+                    }
+
+                    throw error;
                 }
             }
 
-            /*
-             * Evita sobrescrever uma
-             * atribuição alterada por outro
-             * processo enquanto calculávamos
-             * o plano.
-             */
             const updateResult =
                 await tx.reports
                     .updateMany({
@@ -1081,18 +1121,14 @@ async function routeReport(
             trigger
         );
     } catch (error) {
-        /*
-         * Se outro processo alterou a
-         * denúncia no meio da operação,
-         * fazemos uma única reavaliação.
-         */
         if (
-            [
-                "REPORT_STATE_CHANGED",
-                "ROUTING_TARGET_RESTRICTED",
-            ].includes(
-                error.code
-            )
+        [
+            "REPORT_STATE_CHANGED",
+            "ROUTING_TARGET_RESTRICTED",
+            "ROUTING_TARGET_UNSAFE",
+        ].includes(
+            error.code
+        )
         ) {
             const freshReport =
                 await getReport(

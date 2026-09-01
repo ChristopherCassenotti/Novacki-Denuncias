@@ -1,10 +1,10 @@
 const prisma = require('../../database/prisma');
 const { decryptJson, encryptJson } = require('../../security/crypto.service');
 const { randomUUID } = require('node:crypto');
-const { getReportListAccess } = require('../access/reportCapability.service');
+const { getReportListAccess, buildReportListAccessWhere } = require('../access/reportCapability.service');
 const {scheduleRetentionForReport,cancelPendingRetentionForReport,} = require("../retentionScheduler/retentionScheduler.service");
 const { safeExceptionLog } = require("../../utils/safeLog");
-
+const {assertUserCanReceiveReportAccess,} = require("../adminReportRestrictions/reportAccess.service");
 function createServiceError(message, statusCode){
     const error = new Error(message);
 
@@ -178,20 +178,17 @@ async function listAdminReports(
             actorUserId
         );
 
-    if (access.global) {
-        if (
-            access.restrictedReportIds.length > 0
-        ) {
-            where.id = {
-                notIn:
-                    access.restrictedReportIds,
-            };
-        }
-    } else {
-        where.id = {
-            in:
-                access.grantedReportIds,
-        };
+    const accessWhere =
+      buildReportListAccessWhere(
+        access
+      );
+
+    if (
+      Object.keys(accessWhere).length > 0
+    ) {
+      where.AND = [
+        accessWhere,
+      ];
     }
 
     const skip =
@@ -634,8 +631,13 @@ async function assignReport(
             400
           );
         }
-      }
-
+        
+        await assertUserCanReceiveReportAccess(
+          reportId,
+          targetId,
+          tx
+        );
+    }
       /*
        * Valida equipe quando o destino
        * da atribuição for TEAM.

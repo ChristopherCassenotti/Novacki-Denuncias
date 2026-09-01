@@ -1,0 +1,879 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model audit_logs {
+  id            BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  actor_type    audit_logs_actor_type
+  actor_user_id String?               @db.Char(36)
+  action        String                @db.VarChar(120)
+  entity_type   String                @db.VarChar(80)
+  entity_id     String?               @db.VarChar(80)
+  success       Boolean
+  request_id    String?               @db.VarChar(80)
+  ip_hash       Bytes?                @db.Binary(32)
+  user_agent    String?               @db.VarChar(500)
+  metadata_json String?               @db.LongText
+  created_at    DateTime              @default(now())
+  users         users?                @relation(fields: [actor_user_id], references: [id], onUpdate: Restrict, map: "fk_audit_actor_user")
+
+  @@index([action, created_at], map: "idx_audit_action_date")
+  @@index([actor_user_id, created_at], map: "idx_audit_actor_date")
+  @@index([entity_type, entity_id, created_at], map: "idx_audit_entity_date")
+  @@index([request_id], map: "idx_audit_request")
+}
+
+model login_attempts {
+  id                    BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id               String?  @db.Char(36)
+  login_identifier_hash Bytes    @db.Binary(32)
+  ip_hash               Bytes?   @db.Binary(32)
+  user_agent            String?  @db.VarChar(500)
+  success               Boolean
+  failure_reason        String?  @db.VarChar(150)
+  created_at            DateTime @default(now())
+  users                 users?   @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_login_attempts_user")
+
+  @@index([user_id, created_at], map: "idx_login_attempts_user_date")
+  @@index([login_identifier_hash, created_at], map: "idx_login_identifier_date")
+}
+
+model permissions {
+  id               String             @id @db.Char(36)
+  code             String             @unique(map: "uq_permissions_code") @db.VarChar(120)
+  description      String?            @db.VarChar(500)
+  created_at       DateTime           @default(now())
+  role_permissions role_permissions[]
+}
+
+model report_access_credentials {
+  id              String    @id @db.Char(36)
+  report_id       String    @unique(map: "uq_access_credentials_report") @db.Char(36)
+  secret_hash     String    @db.VarChar(255)
+  failed_attempts Int       @default(0)
+  locked_until    DateTime?
+  last_access_at  DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now())
+  reports         reports   @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_access_credentials_report")
+
+  @@index([locked_until], map: "idx_access_credentials_locked")
+}
+
+model report_access_grants {
+  id                                                   String                     @id @db.Char(36)
+  report_id                                            String                     @db.Char(36)
+  user_id                                              String                     @db.Char(36)
+  scope                                                report_access_grants_scope
+  granted_by_user_id                                   String                     @db.Char(36)
+  revoked_by_user_id                                   String?                    @db.Char(36)
+  reason_ciphertext                                    Bytes?
+  reason_iv                                            Bytes?                     @db.Binary(12)
+  reason_auth_tag                                      Bytes?                     @db.Binary(16)
+  reason_key_version                                   Int?
+  expires_at                                           DateTime?
+  revoked_at                                           DateTime?
+  created_at                                           DateTime                   @default(now())
+  users_report_access_grants_granted_by_user_idTousers users                      @relation("report_access_grants_granted_by_user_idTousers", fields: [granted_by_user_id], references: [id], onUpdate: Restrict, map: "fk_access_grants_creator")
+  reports                                              reports                    @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_access_grants_report")
+  users_report_access_grants_revoked_by_user_idTousers users?                     @relation("report_access_grants_revoked_by_user_idTousers", fields: [revoked_by_user_id], references: [id], onUpdate: Restrict, map: "fk_access_grants_revoker")
+  users_report_access_grants_user_idTousers            users                      @relation("report_access_grants_user_idTousers", fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_access_grants_user")
+
+  @@unique([report_id, user_id, scope], map: "uq_access_grants_report_user_scope")
+  @@index([granted_by_user_id], map: "fk_access_grants_creator")
+  @@index([revoked_by_user_id], map: "fk_access_grants_revoker")
+  @@index([report_id, revoked_at], map: "idx_access_grants_report_active")
+  @@index([user_id, revoked_at, expires_at], map: "idx_access_grants_user_active")
+}
+
+model report_assignments {
+  id                                                  String                              @id @db.Char(36)
+  report_id                                           String                              @db.Char(36)
+  assigned_user_id                                    String?                             @db.Char(36)
+  assigned_team_id                                    String?                             @db.Char(36)
+  assigned_by_type                                    report_assignments_assigned_by_type @default(ADMIN)
+  assigned_by_user_id                                 String?                             @db.Char(36)
+  type                                                report_assignments_type             @default(PRIMARY)
+  reason_ciphertext                                   Bytes?
+  reason_iv                                           Bytes?                              @db.Binary(12)
+  reason_auth_tag                                     Bytes?                              @db.Binary(16)
+  reason_key_version                                  Int?
+  started_at                                          DateTime                            @default(now())
+  ended_at                                            DateTime?
+  users_report_assignments_assigned_by_user_idTousers users?                              @relation("report_assignments_assigned_by_user_idTousers", fields: [assigned_by_user_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_assignments_creator")
+  reports                                             reports                             @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_assignments_report")
+  teams                                               teams?                              @relation(fields: [assigned_team_id], references: [id], onUpdate: Restrict, map: "fk_assignments_team")
+  users_report_assignments_assigned_user_idTousers    users?                              @relation("report_assignments_assigned_user_idTousers", fields: [assigned_user_id], references: [id], onUpdate: Restrict, map: "fk_assignments_user")
+
+  @@index([assigned_by_user_id], map: "fk_assignments_creator")
+  @@index([report_id, started_at], map: "idx_assignments_report_date")
+  @@index([assigned_team_id, ended_at], map: "idx_assignments_team_end")
+  @@index([assigned_user_id, ended_at], map: "idx_assignments_user_end")
+}
+
+model report_attachments {
+  id                          String                              @id @db.Char(36)
+  report_id                   String                              @db.Char(36)
+  message_id                  String?                             @db.Char(36)
+  internal_note_id            String?                             @db.Char(36)
+  uploaded_by_type            report_attachments_uploaded_by_type
+  uploaded_by_user_id         String?                             @db.Char(36)
+  visibility                  report_attachments_visibility       @default(REPORTER_AND_ADMIN)
+  storage_key                 String                              @unique(map: "uq_attachments_storage_key") @db.VarChar(500)
+  mime_type                   String                              @db.VarChar(150)
+  size_bytes                  BigInt                              @db.UnsignedBigInt
+  sha256                      String                              @db.Char(64)
+  original_name_ciphertext    Bytes
+  original_name_iv            Bytes                               @db.Binary(12)
+  original_name_auth_tag      Bytes                               @db.Binary(16)
+  original_name_key_version   Int
+  file_iv                     Bytes?                              @db.Binary(12)
+  file_auth_tag               Bytes?                              @db.Binary(16)
+  file_encryption_key_version Int?
+  scan_status                 report_attachments_scan_status      @default(PENDING)
+  scan_started_at             DateTime?
+  scan_completed_at           DateTime?
+  scan_attempts               Int                                 @default(0)
+  available_at                DateTime?
+  quarantined_at              DateTime?
+  purged_at                   DateTime?
+  created_at                  DateTime                            @default(now())
+  report_messages             report_messages?                    @relation(fields: [message_id], references: [id], onUpdate: Restrict, map: "fk_attachments_message")
+  report_internal_notes       report_internal_notes?              @relation(fields: [internal_note_id], references: [id], onUpdate: Restrict, map: "fk_attachments_note")
+  reports                     reports                             @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_attachments_report")
+  users                       users?                              @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: Restrict, map: "fk_attachments_uploader_user")
+
+  @@index([message_id], map: "idx_attachments_message")
+  @@index([internal_note_id], map: "idx_attachments_note")
+  @@index([report_id, created_at], map: "idx_attachments_report_date")
+  @@index([scan_status, created_at], map: "idx_attachments_scan_date")
+  @@index([sha256], map: "idx_attachments_sha256")
+  @@index([uploaded_by_user_id, created_at], map: "idx_attachments_uploader_date")
+}
+
+model report_categories {
+  id                           String                             @id @db.Char(36)
+  code                         String                             @unique(map: "uq_report_categories_code") @db.VarChar(80)
+  name                         String                             @db.VarChar(150)
+  description                  String?                            @db.VarChar(500)
+  default_priority             report_categories_default_priority @default(NORMAL)
+  default_team_id              String?                            @db.Char(36)
+  is_active                    Boolean                            @default(true)
+  created_at                   DateTime                           @default(now())
+  updated_at                   DateTime                           @default(now())
+  anonymized_report_statistics anonymized_report_statistics[]
+  teams                        teams?                             @relation(fields: [default_team_id], references: [id], onUpdate: Restrict, map: "fk_categories_default_team")
+  reports                      reports[]
+  retention_policies           retention_policies[]
+  routing_rules                routing_rules[]
+
+  @@index([is_active], map: "idx_categories_active")
+  @@index([default_team_id], map: "idx_categories_team")
+}
+
+model report_events {
+  id                         String                         @id @db.Char(36)
+  report_id                  String                         @db.Char(36)
+  event_type                 report_events_event_type
+  actor_type                 report_events_actor_type
+  actor_user_id              String?                        @db.Char(36)
+  previous_status            report_events_previous_status?
+  new_status                 report_events_new_status?
+  public_message_ciphertext  Bytes?
+  public_message_iv          Bytes?                         @db.Binary(12)
+  public_message_auth_tag    Bytes?                         @db.Binary(16)
+  public_message_key_version Int?
+  metadata_ciphertext        Bytes?
+  metadata_iv                Bytes?                         @db.Binary(12)
+  metadata_auth_tag          Bytes?                         @db.Binary(16)
+  metadata_key_version       Int?
+  created_at                 DateTime                       @default(now())
+  users                      users?                         @relation(fields: [actor_user_id], references: [id], onUpdate: Restrict, map: "fk_events_actor_user")
+  reports                    reports                        @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_events_report")
+
+  @@index([actor_user_id, created_at], map: "idx_events_actor_date")
+  @@index([report_id, created_at], map: "idx_events_report_date")
+  @@index([event_type, created_at], map: "idx_events_type_date")
+}
+
+model report_identities {
+  id                     String   @id @db.Char(36)
+  report_id              String   @unique(map: "uq_report_identities_report") @db.Char(36)
+  identity_ciphertext    Bytes
+  identity_iv            Bytes    @db.Binary(12)
+  identity_auth_tag      Bytes    @db.Binary(16)
+  encryption_key_version Int
+  consent_to_contact     Boolean  @default(false)
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now())
+  reports                reports  @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_report_identities_report")
+}
+
+model report_internal_notes {
+  id                     String               @id @db.Char(36)
+  report_id              String               @db.Char(36)
+  author_user_id         String               @db.Char(36)
+  body_ciphertext        Bytes
+  body_iv                Bytes                @db.Binary(12)
+  body_auth_tag          Bytes                @db.Binary(16)
+  encryption_key_version Int
+  created_at             DateTime             @default(now())
+  report_attachments     report_attachments[]
+  users                  users                @relation(fields: [author_user_id], references: [id], onUpdate: Restrict, map: "fk_internal_notes_author")
+  reports                reports              @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_internal_notes_report")
+
+  @@index([author_user_id, created_at], map: "idx_internal_notes_author_date")
+  @@index([report_id, created_at], map: "idx_internal_notes_report_date")
+}
+
+model report_messages {
+  id                     String                      @id @db.Char(36)
+  report_id              String                      @db.Char(36)
+  sender_type            report_messages_sender_type
+  sender_user_id         String?                     @db.Char(36)
+  type                   report_messages_type        @default(STANDARD)
+  body_ciphertext        Bytes
+  body_iv                Bytes                       @db.Binary(12)
+  body_auth_tag          Bytes                       @db.Binary(16)
+  encryption_key_version Int
+  requires_response      Boolean                     @default(false)
+  reporter_read_at       DateTime?
+  admin_read_at          DateTime?
+  created_at             DateTime                    @default(now())
+  report_attachments     report_attachments[]
+  reports                reports                     @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_messages_report")
+  users                  users?                      @relation(fields: [sender_user_id], references: [id], onUpdate: Restrict, map: "fk_messages_sender_user")
+
+  @@index([report_id, created_at], map: "idx_messages_report_date")
+  @@index([sender_user_id, created_at], map: "idx_messages_sender_date")
+}
+
+model report_restricted_users {
+  id                                                      String                         @id @db.Char(36)
+  report_id                                               String                         @db.Char(36)
+  user_id                                                 String                         @db.Char(36)
+  reason                                                  report_restricted_users_reason
+  created_by_user_id                                      String                         @db.Char(36)
+  revoked_by_user_id                                      String?                        @db.Char(36)
+  is_active                                               Boolean                        @default(true)
+  notes_ciphertext                                        Bytes?
+  notes_iv                                                Bytes?                         @db.Binary(12)
+  notes_auth_tag                                          Bytes?                         @db.Binary(16)
+  notes_key_version                                       Int?
+  created_at                                              DateTime                       @default(now())
+  revoked_at                                              DateTime?
+  users_report_restricted_users_created_by_user_idTousers users                          @relation("report_restricted_users_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: Restrict, map: "fk_restricted_creator")
+  reports                                                 reports                        @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_restricted_report")
+  users_report_restricted_users_revoked_by_user_idTousers users?                         @relation("report_restricted_users_revoked_by_user_idTousers", fields: [revoked_by_user_id], references: [id], onUpdate: Restrict, map: "fk_restricted_revoker")
+  users_report_restricted_users_user_idTousers            users                          @relation("report_restricted_users_user_idTousers", fields: [user_id], references: [id], onUpdate: Restrict, map: "fk_restricted_user")
+
+  @@unique([report_id, user_id], map: "uq_restricted_report_user")
+  @@index([created_by_user_id], map: "fk_restricted_creator")
+  @@index([revoked_by_user_id], map: "fk_restricted_revoker")
+  @@index([report_id, is_active], map: "idx_restricted_report_active")
+  @@index([user_id, is_active], map: "idx_restricted_user_active")
+}
+
+model report_retention_executions {
+  id                           String                             @id @db.Char(36)
+  report_id                    String?                            @db.Char(36)
+  policy_id                    String?                            @db.Char(36)
+  report_reference_hash        Bytes                              @db.Binary(32)
+  action                       report_retention_executions_action
+  status                       report_retention_executions_status @default(PENDING)
+  scheduled_at                 DateTime
+  started_at                   DateTime?
+  completed_at                 DateTime?
+  executed_by_user_id          String?                            @db.Char(36)
+  error_message                String?                            @db.VarChar(1000)
+  created_at                   DateTime                           @default(now())
+  updated_at                   DateTime                           @default(now())
+  retention_policies           retention_policies?                @relation(fields: [policy_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_policy")
+  reports                      reports?                           @relation(fields: [report_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_report")
+  users                        users?                             @relation(fields: [executed_by_user_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_user")
+  retention_object_purge_queue retention_object_purge_queue[]
+
+  @@index([executed_by_user_id], map: "fk_retention_exec_user")
+  @@index([policy_id], map: "idx_retention_exec_policy")
+  @@index([report_id], map: "idx_retention_exec_report")
+  @@index([status, scheduled_at], map: "idx_retention_exec_status_date")
+}
+
+model reporter_sessions {
+  id           String    @id @db.Char(36)
+  report_id    String    @db.Char(36)
+  token_hash   Bytes     @unique(map: "uq_reporter_sessions_token") @db.Binary(32)
+  expires_at   DateTime
+  last_used_at DateTime?
+  revoked_at   DateTime?
+  created_at   DateTime  @default(now())
+  reports      reports   @relation(fields: [report_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_reporter_sessions_report")
+
+  @@index([report_id, expires_at], map: "idx_reporter_sessions_report_expiry")
+  @@index([revoked_at, expires_at], map: "idx_reporter_sessions_revoked_expiry")
+}
+
+model reports {
+  id                           String                        @id @db.Char(36)
+  protocol                     String                        @unique(map: "uq_reports_protocol") @db.VarChar(40)
+  mode                         reports_mode
+  relationship_type            reports_relationship_type
+  unit_id                      String?                       @db.Char(36)
+  category_id                  String                        @db.Char(36)
+  immediate_risk               Boolean                       @default(false)
+  priority                     reports_priority              @default(NORMAL)
+  status                       reports_status                @default(RECEIVED)
+  content_ciphertext           Bytes
+  content_iv                   Bytes                         @db.Binary(12)
+  content_auth_tag             Bytes                         @db.Binary(16)
+  encryption_key_version       Int
+  current_assignee_user_id     String?                       @db.Char(36)
+  current_assignee_team_id     String?                       @db.Char(36)
+  status_version               Int                           @default(1)
+  last_activity_at             DateTime                      @default(now())
+  concluded_at                 DateTime?
+  archived_at                  DateTime?
+  retention_until              DateTime?
+  legal_hold                   Boolean                       @default(false)
+  legal_hold_reason_ciphertext Bytes?
+  legal_hold_reason_iv         Bytes?                        @db.Binary(12)
+  legal_hold_reason_auth_tag   Bytes?                        @db.Binary(16)
+  legal_hold_key_version       Int?
+  created_at                   DateTime                      @default(now())
+  updated_at                   DateTime                      @default(now())
+  report_access_credentials    report_access_credentials?
+  report_access_grants         report_access_grants[]
+  report_assignments           report_assignments[]
+  report_attachments           report_attachments[]
+  report_events                report_events[]
+  report_identities            report_identities?
+  report_internal_notes        report_internal_notes[]
+  report_messages              report_messages[]
+  report_restricted_users      report_restricted_users[]
+  report_retention_executions  report_retention_executions[]
+  reporter_sessions            reporter_sessions[]
+  teams                        teams?                        @relation(fields: [current_assignee_team_id], references: [id], onUpdate: Restrict, map: "fk_reports_assignee_team")
+  users                        users?                        @relation(fields: [current_assignee_user_id], references: [id], onUpdate: Restrict, map: "fk_reports_assignee_user")
+  report_categories            report_categories             @relation(fields: [category_id], references: [id], onUpdate: Restrict, map: "fk_reports_category")
+  units                        units?                        @relation(fields: [unit_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_reports_unit")
+
+  @@index([category_id, status], map: "idx_reports_category_status")
+  @@index([last_activity_at], map: "idx_reports_last_activity")
+  @@index([priority, status], map: "idx_reports_priority_status")
+  @@index([retention_until, legal_hold], map: "idx_reports_retention_hold")
+  @@index([status, created_at], map: "idx_reports_status_created")
+  @@index([current_assignee_team_id, status], map: "idx_reports_team_status")
+  @@index([unit_id, status], map: "idx_reports_unit_status")
+  @@index([current_assignee_user_id, status], map: "idx_reports_user_status")
+}
+
+model retention_policies {
+  id                          String                                @id @db.Char(36)
+  name                        String                                @db.VarChar(150)
+  category_id                 String?                               @db.Char(36)
+  applies_to_status           retention_policies_applies_to_status?
+  retention_days              Int
+  action                      retention_policies_action
+  is_active                   Boolean                               @default(true)
+  created_at                  DateTime                              @default(now())
+  updated_at                  DateTime                              @default(now())
+  report_retention_executions report_retention_executions[]
+  report_categories           report_categories?                    @relation(fields: [category_id], references: [id], onUpdate: Restrict, map: "fk_retention_category")
+
+  @@index([is_active], map: "idx_retention_active")
+  @@index([category_id, applies_to_status], map: "idx_retention_category_status")
+}
+
+model role_permissions {
+  role_id       String      @db.Char(36)
+  permission_id String      @db.Char(36)
+  created_at    DateTime    @default(now())
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_role_permissions_permission")
+  roles         roles       @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_role_permissions_role")
+
+  @@id([role_id, permission_id])
+  @@index([permission_id], map: "idx_role_permissions_permission")
+}
+
+model roles {
+  id               String             @id @db.Char(36)
+  code             String             @unique(map: "uq_roles_code") @db.VarChar(80)
+  name             String             @db.VarChar(120)
+  description      String?            @db.VarChar(500)
+  is_system        Boolean            @default(false)
+  is_active        Boolean            @default(true)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @default(now())
+  role_permissions role_permissions[]
+  routing_rules    routing_rules[]
+  user_roles       user_roles[]
+
+  @@index([is_active], map: "idx_roles_active")
+}
+
+model routing_rules {
+  id                                            String                           @id @db.Char(36)
+  name                                          String                           @db.VarChar(150)
+  priority                                      Int                              @default(100)
+  is_active                                     Boolean                          @default(true)
+  stop_processing                               Boolean                          @default(true)
+  category_id                                   String?                          @db.Char(36)
+  unit_id                                       String?                          @db.Char(36)
+  report_mode                                   routing_rules_report_mode?
+  relationship_type                             routing_rules_relationship_type?
+  immediate_risk                                Boolean?
+  restricted_role_id                            String?                          @db.Char(36)
+  target_user_id                                String?                          @db.Char(36)
+  target_team_id                                String?                          @db.Char(36)
+  set_priority                                  routing_rules_set_priority?
+  created_by_user_id                            String                           @db.Char(36)
+  created_at                                    DateTime                         @default(now())
+  updated_at                                    DateTime                         @default(now())
+  report_categories                             report_categories?               @relation(fields: [category_id], references: [id], onUpdate: Restrict, map: "fk_routing_category")
+  users_routing_rules_created_by_user_idTousers users                            @relation("routing_rules_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: Restrict, map: "fk_routing_creator")
+  roles                                         roles?                           @relation(fields: [restricted_role_id], references: [id], onUpdate: Restrict, map: "fk_routing_restricted_role")
+  teams                                         teams?                           @relation(fields: [target_team_id], references: [id], onUpdate: Restrict, map: "fk_routing_target_team")
+  users_routing_rules_target_user_idTousers     users?                           @relation("routing_rules_target_user_idTousers", fields: [target_user_id], references: [id], onUpdate: Restrict, map: "fk_routing_target_user")
+  units                                         units?                           @relation(fields: [unit_id], references: [id], onUpdate: Restrict, map: "fk_routing_unit")
+
+  @@index([created_by_user_id], map: "fk_routing_creator")
+  @@index([target_team_id], map: "fk_routing_target_team")
+  @@index([target_user_id], map: "fk_routing_target_user")
+  @@index([is_active, priority], map: "idx_routing_active_priority")
+  @@index([category_id], map: "idx_routing_category")
+  @@index([restricted_role_id], map: "idx_routing_restricted_role")
+  @@index([unit_id], map: "idx_routing_unit")
+}
+
+model system_settings {
+  id          String   @id @db.Char(36)
+  key         String   @unique(map: "uq_system_settings_key") @db.VarChar(120)
+  value       String   @db.LongText
+  description String?  @db.VarChar(500)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model team_members {
+  team_id   String            @db.Char(36)
+  user_id   String            @db.Char(36)
+  role      team_members_role @default(MEMBER)
+  joined_at DateTime          @default(now())
+  teams     teams             @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_team_members_team")
+  users     users             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_team_members_user")
+
+  @@id([team_id, user_id])
+  @@index([user_id], map: "idx_team_members_user")
+}
+
+model teams {
+  id                 String               @id @db.Char(36)
+  name               String               @unique(map: "uq_teams_name") @db.VarChar(150)
+  description        String?              @db.VarChar(500)
+  is_independent     Boolean              @default(false)
+  is_active          Boolean              @default(true)
+  created_at         DateTime             @default(now())
+  updated_at         DateTime             @default(now())
+  report_assignments report_assignments[]
+  report_categories  report_categories[]
+  reports            reports[]
+  routing_rules      routing_rules[]
+  team_members       team_members[]
+
+  @@index([is_active], map: "idx_teams_active")
+}
+
+model units {
+  id            String          @id @db.Char(36)
+  parent_id     String?         @db.Char(36)
+  code          String          @unique(map: "uq_units_code") @db.VarChar(80)
+  name          String          @db.VarChar(150)
+  type          units_type
+  is_active     Boolean         @default(true)
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @default(now())
+  reports       reports[]
+  routing_rules routing_rules[]
+  units         units?          @relation("unitsTounits", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_units_parent")
+  other_units   units[]         @relation("unitsTounits")
+
+  @@index([parent_id], map: "idx_units_parent")
+  @@index([type, is_active], map: "idx_units_type_active")
+}
+
+model user_mfa_methods {
+  id                     String                @id @db.Char(36)
+  user_id                String                @db.Char(36)
+  type                   user_mfa_methods_type @default(TOTP)
+  label                  String?               @db.VarChar(100)
+  secret_ciphertext      Bytes
+  secret_iv              Bytes                 @db.Binary(12)
+  secret_auth_tag        Bytes                 @db.Binary(16)
+  encryption_key_version Int
+  is_active              Boolean               @default(false)
+  verified_at            DateTime?
+  last_used_at           DateTime?
+  created_at             DateTime              @default(now())
+  updated_at             DateTime              @default(now())
+  users                  users                 @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_mfa_user")
+
+  @@index([user_id, is_active], map: "idx_mfa_user_active")
+}
+
+model user_one_time_tokens {
+  id         String                    @id @db.Char(36)
+  user_id    String                    @db.Char(36)
+  type       user_one_time_tokens_type
+  token_hash Bytes                     @unique(map: "uq_one_time_token_hash") @db.Binary(32)
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime                  @default(now())
+  users      users                     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_one_time_tokens_user")
+
+  @@index([user_id, type, expires_at], map: "idx_one_time_user_type_expiry")
+}
+
+model user_recovery_codes {
+  id         String    @id @db.Char(36)
+  user_id    String    @db.Char(36)
+  code_hash  String    @db.VarChar(255)
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_recovery_user")
+
+  @@index([user_id, used_at], map: "idx_recovery_user_used")
+}
+
+model user_roles {
+  user_id     String   @db.Char(36)
+  role_id     String   @db.Char(36)
+  assigned_at DateTime @default(now())
+  roles       roles    @relation(fields: [role_id], references: [id], onUpdate: Restrict, map: "fk_user_roles_role")
+  users       users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_user_roles_user")
+
+  @@id([user_id, role_id])
+  @@index([role_id], map: "idx_user_roles_role")
+}
+
+model user_sessions {
+  id           String    @id @db.Char(36)
+  user_id      String    @db.Char(36)
+  token_hash   Bytes     @unique(map: "uq_user_sessions_token") @db.Binary(32)
+  ip_hash      Bytes?    @db.Binary(32)
+  user_agent   String?   @db.VarChar(500)
+  expires_at   DateTime
+  last_used_at DateTime?
+  revoked_at   DateTime?
+  created_at   DateTime  @default(now())
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_user_sessions_user")
+
+  @@index([revoked_at, expires_at], map: "idx_user_sessions_revoked_expiry")
+  @@index([user_id, expires_at], map: "idx_user_sessions_user_expiry")
+}
+
+model users {
+  id                                                                        String                        @id @db.Char(36)
+  name                                                                      String                        @db.VarChar(150)
+  email                                                                     String                        @unique(map: "uq_users_email")
+  password_hash                                                             String                        @db.VarChar(255)
+  is_active                                                                 Boolean                       @default(true)
+  must_change_password                                                      Boolean                       @default(true)
+  last_login_at                                                             DateTime?
+  password_changed_at                                                       DateTime?
+  disabled_at                                                               DateTime?
+  created_at                                                                DateTime                      @default(now())
+  updated_at                                                                DateTime                      @default(now())
+  audit_logs                                                                audit_logs[]
+  login_attempts                                                            login_attempts[]
+  report_access_grants_report_access_grants_granted_by_user_idTousers       report_access_grants[]        @relation("report_access_grants_granted_by_user_idTousers")
+  report_access_grants_report_access_grants_revoked_by_user_idTousers       report_access_grants[]        @relation("report_access_grants_revoked_by_user_idTousers")
+  report_access_grants_report_access_grants_user_idTousers                  report_access_grants[]        @relation("report_access_grants_user_idTousers")
+  report_assignments_report_assignments_assigned_by_user_idTousers          report_assignments[]          @relation("report_assignments_assigned_by_user_idTousers")
+  report_assignments_report_assignments_assigned_user_idTousers             report_assignments[]          @relation("report_assignments_assigned_user_idTousers")
+  report_attachments                                                        report_attachments[]
+  report_events                                                             report_events[]
+  report_internal_notes                                                     report_internal_notes[]
+  report_messages                                                           report_messages[]
+  report_restricted_users_report_restricted_users_created_by_user_idTousers report_restricted_users[]     @relation("report_restricted_users_created_by_user_idTousers")
+  report_restricted_users_report_restricted_users_revoked_by_user_idTousers report_restricted_users[]     @relation("report_restricted_users_revoked_by_user_idTousers")
+  report_restricted_users_report_restricted_users_user_idTousers            report_restricted_users[]     @relation("report_restricted_users_user_idTousers")
+  report_retention_executions                                               report_retention_executions[]
+  reports                                                                   reports[]
+  routing_rules_routing_rules_created_by_user_idTousers                     routing_rules[]               @relation("routing_rules_created_by_user_idTousers")
+  routing_rules_routing_rules_target_user_idTousers                         routing_rules[]               @relation("routing_rules_target_user_idTousers")
+  team_members                                                              team_members[]
+  user_mfa_methods                                                          user_mfa_methods[]
+  user_one_time_tokens                                                      user_one_time_tokens[]
+  user_recovery_codes                                                       user_recovery_codes[]
+  user_roles                                                                user_roles[]
+  user_sessions                                                             user_sessions[]
+
+  @@index([is_active], map: "idx_users_active")
+}
+
+model retention_object_purge_queue {
+  id                          String                              @id @db.Char(36)
+  execution_id                String                              @db.Char(36)
+  storage_key                 String                              @db.VarChar(500)
+  status                      retention_object_purge_queue_status @default(PENDING)
+  attempts                    Int                                 @default(0)
+  last_error                  String?                             @db.VarChar(1000)
+  created_at                  DateTime                            @default(now())
+  updated_at                  DateTime                            @default(now()) @updatedAt
+  report_retention_executions report_retention_executions         @relation(fields: [execution_id], references: [id], onDelete: Cascade, map: "fk_retention_purge_execution")
+
+  @@unique([execution_id, storage_key], map: "uq_retention_purge_execution_key")
+  @@index([execution_id], map: "idx_retention_purge_execution")
+  @@index([status, created_at], map: "idx_retention_purge_status")
+}
+
+model anonymized_report_statistics {
+  id                     String            @id @db.Char(36)
+  period_month           DateTime          @db.Date
+  category_id            String            @db.Char(36)
+  total_reports          Int               @default(0) @db.UnsignedInt
+  anonymous_reports      Int               @default(0) @db.UnsignedInt
+  identified_reports     Int               @default(0) @db.UnsignedInt
+  immediate_risk_reports Int               @default(0) @db.UnsignedInt
+  created_at             DateTime          @default(now())
+  updated_at             DateTime          @default(now()) @updatedAt
+  report_categories      report_categories @relation(fields: [category_id], references: [id], map: "fk_anonymized_stats_category")
+
+  @@unique([period_month, category_id], map: "uq_anonymized_stats_month_category")
+  @@index([period_month], map: "idx_anonymized_stats_period")
+  @@index([category_id], map: "idx_anonymized_stats_category")
+}
+
+enum audit_logs_actor_type {
+  ADMIN
+  SYSTEM
+}
+
+enum reports_mode {
+  ANONYMOUS
+  IDENTIFIED
+}
+
+enum report_events_event_type {
+  REPORT_CREATED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  ACCESS_GRANTED
+  ACCESS_REVOKED
+  USER_RESTRICTED
+  USER_RESTRICTION_REVOKED
+  MESSAGE_SENT
+  INFORMATION_REQUESTED
+  INFORMATION_RECEIVED
+  INTERNAL_NOTE_ADDED
+  ATTACHMENT_ADDED
+  REPORT_CONCLUDED
+  REPORT_ARCHIVED
+  LEGAL_HOLD_APPLIED
+  LEGAL_HOLD_REMOVED
+  RETENTION_SCHEDULED
+  RETENTION_EXECUTED
+}
+
+enum user_mfa_methods_type {
+  TOTP
+}
+
+enum user_one_time_tokens_type {
+  USER_INVITATION
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+
+enum report_messages_sender_type {
+  REPORTER
+  ADMIN
+  SYSTEM
+}
+
+enum team_members_role {
+  COORDINATOR
+  MEMBER
+  OBSERVER
+}
+
+enum reports_relationship_type {
+  EMPLOYEE
+  FORMER_EMPLOYEE
+  SUPPLIER
+  CUSTOMER
+  OTHER
+}
+
+enum report_restricted_users_reason {
+  MENTIONED_IN_REPORT
+  CONFLICT_OF_INTEREST
+  HR_INVOLVEMENT
+  ADMIN_INVOLVEMENT
+  MANUAL
+}
+
+enum report_events_actor_type {
+  REPORTER
+  ADMIN
+  SYSTEM
+}
+
+enum retention_policies_applies_to_status {
+  RECEIVED
+  INITIAL_REVIEW
+  WAITING_REPORTER_INFORMATION
+  INVESTIGATING
+  FORWARDED
+  CONCLUDED
+  ARCHIVED
+}
+
+enum report_access_grants_scope {
+  VIEW
+  MESSAGE
+  INVESTIGATE
+  MANAGE
+}
+
+enum report_categories_default_priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum report_attachments_uploaded_by_type {
+  REPORTER
+  ADMIN
+  SYSTEM
+}
+
+enum units_type {
+  COMPANY
+  UNIT
+  DEPARTMENT
+  SECTOR
+  LOCATION
+}
+
+enum report_retention_executions_action {
+  ANONYMIZE
+  DELETE
+}
+
+enum report_messages_type {
+  STANDARD
+  QUESTION
+  COMPLEMENT
+  FINAL_RESPONSE
+  SYSTEM_NOTICE
+}
+
+enum report_events_previous_status {
+  RECEIVED
+  INITIAL_REVIEW
+  WAITING_REPORTER_INFORMATION
+  INVESTIGATING
+  FORWARDED
+  CONCLUDED
+  ARCHIVED
+}
+
+enum retention_policies_action {
+  ANONYMIZE
+  DELETE
+}
+
+enum report_assignments_type {
+  PRIMARY
+  SUPPORTING
+  TEAM
+}
+
+enum report_retention_executions_status {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum report_events_new_status {
+  RECEIVED
+  INITIAL_REVIEW
+  WAITING_REPORTER_INFORMATION
+  INVESTIGATING
+  FORWARDED
+  CONCLUDED
+  ARCHIVED
+}
+
+enum report_attachments_visibility {
+  REPORTER_AND_ADMIN
+  ADMIN_ONLY
+}
+
+enum reports_priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum routing_rules_report_mode {
+  ANONYMOUS
+  IDENTIFIED
+}
+
+enum reports_status {
+  RECEIVED
+  INITIAL_REVIEW
+  WAITING_REPORTER_INFORMATION
+  INVESTIGATING
+  FORWARDED
+  CONCLUDED
+  ARCHIVED
+}
+
+enum routing_rules_relationship_type {
+  EMPLOYEE
+  FORMER_EMPLOYEE
+  SUPPLIER
+  CUSTOMER
+  OTHER
+}
+
+enum routing_rules_set_priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum retention_object_purge_queue_status {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum report_attachments_scan_status {
+  PENDING
+  SCANNING
+  CLEAN
+  INFECTED
+  FAILED
+  QUARANTINED
+}
+
+enum report_assignments_assigned_by_type {
+  ADMIN
+  SYSTEM
+}

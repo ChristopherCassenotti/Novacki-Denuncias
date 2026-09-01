@@ -112,4 +112,18 @@ const listUsersQuerySchema = z.object({
     .optional(),
 });
 
-module.exports = { userIdParamSchema, createUserSchema, updateUserSchema, replaceUserRolesSchema, changeUserStatusSchema, resetUserPasswordSchema, listUsersQuerySchema, };
+const unitIdsSchema = z
+  .array(
+    z
+      .string()
+      .uuid("Cada unidade precisa possuir um UUID válido.")
+  )
+  .min(1, "O usuário precisa possuir pelo menos uma unidade.")
+  .max(50, "Não é possível atribuir mais de 50 unidades.")
+  .transform((unitIds) => [...new Set(unitIds)]);
+
+const replaceUserUnitsSchema = z.object({
+  unitIds: unitIdsSchema,
+});
+
+module.exports = { userIdParamSchema, createUserSchema, updateUserSchema, replaceUserRolesSchema, changeUserStatusSchema, resetUserPasswordSchema, listUsersQuerySchema, replaceUserUnitsSchema};

@@ -1,7 +1,13 @@
 const prisma = require(
   "../../database/prisma"
 );
-
+const {
+  assertUserCanAccessReport,
+  userIsAdminMaster,
+  getUserUnitIds,
+} = require(
+  "../adminReportRestrictions/reportAccess.service"
+);
 const SCOPE_LEVELS = {
   VIEW: 1,
   MESSAGE: 2,
@@ -200,39 +206,15 @@ async function assertReportCapability({
   permission,
   scope,
 }) {
-  const restriction =
-    await prisma.report_restricted_users.findFirst({
-      where: {
-        report_id:
-          reportId,
+  await assertUserCanAccessReport(reportId,userId);
 
-        user_id:
-          userId,
-
-        is_active:
-          true,
-      },
-
-      select: {
-        id: true,
-      },
-    });
-
-  if (restriction) {
-    throw createAccessError(
-      "Você não possui acesso a esta denúncia.",
-      403
-    );
-  }
   const hasGlobalPermission =
     await userHasPermission(
       userId,
       permission
     );
 
-  if (
-    hasGlobalPermission
-  ) {
+  if (hasGlobalPermission) {
     return true;
   }
 
@@ -252,30 +234,40 @@ async function assertReportCapability({
     403
   );
 }
+
 async function getReportListAccess(
   userId
 ) {
-  const hasGlobalView =
-    await userHasPermission(
+  const [
+    hasGlobalView,
+    isAdminMaster,
+    unitIds,
+    restrictions,
+  ] = await Promise.all([
+    userHasPermission(
       userId,
       "REPORT_VIEW"
-    );
+    ),
 
-  const restrictions =
-    await prisma.report_restricted_users.findMany({
+    userIsAdminMaster(
+      userId
+    ),
+
+    getUserUnitIds(
+      userId
+    ),
+
+    prisma.report_restricted_users.findMany({
       where: {
-        user_id:
-          userId,
-
-        is_active:
-          true,
+        user_id: userId,
+        is_active: true,
       },
 
       select: {
-        report_id:
-          true,
+        report_id: true,
       },
-    });
+    }),
+  ]);
 
   const restrictedReportIds =
     restrictions.map(
@@ -284,25 +276,47 @@ async function getReportListAccess(
     );
 
   /*
-   * Quem possui REPORT_VIEW global
-   * vê todas, exceto as restritas.
+   * ADMIN_MASTER + REPORT_VIEW
+   * enxerga todas as unidades.
    */
-  if (hasGlobalView) {
+  if (
+    isAdminMaster &&
+    hasGlobalView
+  ) {
     return {
-      global:
-        true,
-
+      mode: "ALL",
+      allUnits: true,
+      unitIds: [],
       restrictedReportIds,
-      grantedReportIds:
-        [],
+      grantedReportIds: [],
     };
   }
 
+  /*
+   * Usuário com REPORT_VIEW
+   * enxerga todas as denúncias,
+   * mas somente das próprias unidades.
+   */
+  if (hasGlobalView) {
+    return {
+      mode: "UNITS",
+      allUnits: false,
+      unitIds,
+      restrictedReportIds,
+      grantedReportIds: [],
+    };
+  }
+
+  /*
+   * Sem REPORT_VIEW:
+   * continua podendo acessar denúncias
+   * explicitamente concedidas por grant,
+   * mas nunca fora de suas unidades.
+   */
   const grants =
     await prisma.report_access_grants.findMany({
       where: {
-        user_id:
-          userId,
+        user_id: userId,
 
         scope: {
           in: [
@@ -313,27 +327,23 @@ async function getReportListAccess(
           ],
         },
 
-        revoked_at:
-          null,
+        revoked_at: null,
 
         OR: [
           {
-            expires_at:
-              null,
+            expires_at: null,
           },
 
           {
             expires_at: {
-              gt:
-                new Date(),
+              gt: new Date(),
             },
           },
         ],
       },
 
       select: {
-        report_id:
-          true,
+        report_id: true,
       },
     });
 
@@ -354,17 +364,75 @@ async function getReportListAccess(
   ];
 
   return {
-    global:
-      false,
-
+    mode: "GRANTS",
+    allUnits: isAdminMaster,
+    unitIds:
+      isAdminMaster
+        ? []
+        : unitIds,
     restrictedReportIds,
     grantedReportIds,
   };
 }
+
+function buildReportListAccessWhere(
+  access
+) {
+  const conditions = [];
+
+  if (access.mode === "UNITS") {
+    conditions.push({
+      unit_id: {
+        in: access.unitIds,
+      },
+    });
+  }
+
+  if (access.mode === "GRANTS") {
+    conditions.push({
+      id: {
+        in: access.grantedReportIds,
+      },
+    });
+
+    if (!access.allUnits) {
+      conditions.push({
+        unit_id: {
+          in: access.unitIds,
+        },
+      });
+    }
+  }
+
+  if (
+    access.restrictedReportIds.length > 0
+  ) {
+    conditions.push({
+      id: {
+        notIn:
+          access.restrictedReportIds,
+      },
+    });
+  }
+
+  if (conditions.length === 0) {
+    return {};
+  }
+
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+
+  return {
+    AND: conditions,
+  };
+}
+
 module.exports = {
   userHasPermission,
   userHasReportGrant,
   assertReportCapability,
   getAcceptedScopes,
   getReportListAccess,
+  buildReportListAccessWhere,
 };

@@ -55,6 +55,34 @@ test("bloqueia origem cross-site em operações administrativas", async () => {
   assert.equal(response.status, 403);
 });
 
+test("permite preflight CORS para rotas administrativas PUT", async () => {
+  const allowedOrigin = String(process.env.CORS_ORIGINS)
+    .split(",")[0]
+    .trim();
+
+  const response = await fetch(
+    `${baseUrl}/api/admin/users/user-id/roles`,
+    {
+      method: "OPTIONS",
+      headers: {
+        origin: allowedOrigin,
+        "access-control-request-method": "PUT",
+        "access-control-request-headers": "content-type",
+      },
+    }
+  );
+
+  assert.equal(response.status, 204);
+  assert.equal(
+    response.headers.get("access-control-allow-origin"),
+    allowedOrigin
+  );
+  assert.match(
+    response.headers.get("access-control-allow-methods"),
+    /(?:^|,)PUT(?:,|$)/
+  );
+});
+
 test("limita tentativas repetidas de login", async () => {
   let response;
   const configuredLimit = Number(process.env.RATE_LIMIT_LOGIN_MAX);

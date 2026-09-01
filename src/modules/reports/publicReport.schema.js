@@ -113,10 +113,15 @@ const createPublicReportSchema = z
     ),
 
     unitId: z
-      .string()
-      .uuid("A unidade precisa possuir um UUID válido.")
-      .nullable()
-      .optional(),
+      .string({
+        required_error:
+          "A unidade é obrigatória.",
+        invalid_type_error:
+          "A unidade é obrigatória.",
+      })
+      .uuid(
+        "A unidade precisa possuir um UUID válido."
+      ),
 
     categoryId: z
       .string()

@@ -16,6 +16,7 @@ const retentionExecutorRoutes = require('./modules/retentionExecutor/retentionEx
 const attachmentScannerRoutes = require('./modules/attachmentScanner/attachmentScanner.routes');
 const routingRulesRoutes = require("./modules/routingRules/routingRules.routes");
 const routingEngineRoutes = require("./modules/routingEngine/routingEngine.routes");
+const adminUnitsRoutes = require('./modules/adminUnits/adminUnits.routes');
 const healthRoutes = require("./modules/health/health.routes");
 const { configureTrustProxy,} = require("./config/trustProxy");
 const { requestIdMiddleware, createSecurityHeaders, createCorsMiddleware, noStoreMiddleware, generalApiLimiter, } = require("./middlewares/security.middlewares");
@@ -54,6 +55,8 @@ app.use("/api/admin/retention-executor", retentionExecutorRoutes);
 app.use("/api/admin/attachment-scanner", attachmentScannerRoutes);
 app.use("/api/admin/routing-rules", routingRulesRoutes);
 app.use("/api/admin/routing-engine", routingEngineRoutes);
+app.use('/api/admin/audit-logs', adminAuditLogsRoutes);
+app.use('/api/admin/units', adminUnitsRoutes);
 
 app.use(notFoundHandler);
 app.use(globalErrorHandler);

@@ -5,6 +5,7 @@ const prisma =
 
 const {
     getReportListAccess,
+    buildReportListAccessWhere,
 } = require(
     "../access/reportCapability.service"
 );
@@ -48,29 +49,19 @@ async function buildDashboardWhere(
             actorUserId
         );
 
+    const accessWhere =
+      buildReportListAccessWhere(
+        access
+      );
+
     const where = {};
 
-    /*
-     * Controle de acesso.
-     */
-    if (access.global) {
-        if (
-            access
-                .restrictedReportIds
-                .length > 0
-        ) {
-            where.id = {
-                notIn:
-                    access
-                        .restrictedReportIds,
-            };
-        }
-    } else {
-        where.id = {
-            in:
-                access
-                    .grantedReportIds,
-        };
+    if (
+      Object.keys(accessWhere).length > 0
+    ) {
+      where.AND = [
+        accessWhere,
+      ];
     }
 
     const createdAt =

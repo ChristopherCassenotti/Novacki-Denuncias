@@ -141,6 +141,12 @@ const rolesData = [
       "Configura usuários, permissões e o sistema sem acesso automático ao conteúdo das denúncias.",
   },
   {
+    code: "ADMIN_MASTER",
+    name: "Administrador geral",
+    description:
+      "Administrador geral com acesso às denúncias de todas as unidades.",
+  },
+  {
     code: "TRIAGE",
     name: "Responsável pela triagem",
     description:
@@ -178,7 +184,9 @@ const rolePermissions = {
     "RETENTION_MANAGE",
     "SETTINGS_MANAGE",
   ],
-
+  ADMIN_MASTER: permissionsData.map(
+  (permission) => permission.code
+  ),
   TRIAGE: [
     "REPORT_LIST",
     "REPORT_VIEW",

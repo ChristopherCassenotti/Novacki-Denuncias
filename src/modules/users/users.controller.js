@@ -1,6 +1,6 @@
 const { safeExceptionLog } = require("../../utils/safeLog");
-const { userIdParamSchema, createUserSchema, updateUserSchema, replaceUserRolesSchema, changeUserStatusSchema, resetUserPasswordSchema, listUsersQuerySchema, } = require("./users.schema");
-const { getUserById, listUsers, createUser: createUserService, updateUser: updateUserService, replaceUserRoles, changeUserStatus, resetUserPassword,} = require("./users.service");
+const { replaceUserUnitsSchema, userIdParamSchema, createUserSchema, updateUserSchema, replaceUserRolesSchema, changeUserStatusSchema, resetUserPasswordSchema, listUsersQuerySchema, } = require("./users.schema");
+const { getUserById, listUsers, createUser: createUserService, updateUser: updateUserService, replaceUserRoles, changeUserStatus, resetUserPassword, replaceUserUnits,} = require("./users.service");
 
 function formatValidationErrors(error){
     return error.issues.map((issue) => ({
@@ -273,4 +273,51 @@ async function resetPasswordHandler(req, res) {
     }
 }
 
-module.exports = { getUser, getUsers, createUserHandler, updateUserHandler, replaceRolesHandler, changeStatusHandler, resetPasswordHandler };
+async function replaceUnitsHandler(req, res) {
+  const paramsValidation =
+    userIdParamSchema.safeParse(req.params);
+
+  if (!paramsValidation.success) {
+    return res.status(400).json({
+      message: "ID de usuário inválido.",
+      errors: formatValidationErrors(
+        paramsValidation.error
+      ),
+    });
+  }
+
+  const bodyValidation =
+    replaceUserUnitsSchema.safeParse(req.body);
+
+  if (!bodyValidation.success) {
+    return res.status(400).json({
+      message: "Lista de unidades inválida.",
+      errors: formatValidationErrors(
+        bodyValidation.error
+      ),
+    });
+  }
+
+  try {
+    const user = await replaceUserUnits(
+      paramsValidation.data.id,
+      bodyValidation.data.unitIds,
+      req.auth.userId
+    );
+
+    return res.status(200).json({
+      message:
+        "Unidades do usuário atualizadas com sucesso.",
+      data: {
+        user,
+      },
+    });
+  } catch (error) {
+    return sendControllerError(
+      res,
+      error,
+      "Não foi possível atualizar as unidades do usuário."
+    );
+  }
+}
+module.exports = { getUser, getUsers, createUserHandler, updateUserHandler, replaceRolesHandler, changeStatusHandler, resetPasswordHandler, replaceUnitsHandler };

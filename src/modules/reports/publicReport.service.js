@@ -34,23 +34,31 @@ async function getCategoryOrFail(categoryId) {
     return category;
 }
 
-async function validateUnit(unitId) {
-    if(!unitId){
-        return null;
-    }
-    
-    const unit = await prisma.units.findUnique({
-        where:{
-            id: unitId,
-        },
-        select:{
-            id: true,
-            is_active: true,
-        },
-    });
+async function validateUnit(
+    unitId
+) {
+    const unit =
+        await prisma.units.findUnique({
+            where: {
+                id: unitId,
+            },
 
-    if(!unit || !unit.is_active){
-        throw createServiceError('Unidade inválida ou indisponível.', 400);
+            select: {
+                id: true,
+                type: true,
+                is_active: true,
+            },
+        });
+
+    if (
+        !unit ||
+        !unit.is_active ||
+        unit.type !== "UNIT"
+    ) {
+        throw createServiceError(
+            "Unidade inválida ou indisponível.",
+            400
+        );
     }
 
     return unit.id;

@@ -19,6 +19,58 @@ function createServiceError(message, statusCode) {
   return error;
 }
 
+async function validateUnitIds(database, unitIds = []) {
+  const uniqueUnitIds = [...new Set(unitIds)];
+
+  if (uniqueUnitIds.length === 0) {
+    throw createServiceError(
+      "O usuário precisa possuir pelo menos uma unidade.",
+      400
+    );
+  }
+
+  const units = await database.units.findMany({
+    where: {
+      id: {
+        in: uniqueUnitIds,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      is_active: true,
+    },
+  });
+
+  const existingUnitIds = new Set(
+    units.map((unit) => unit.id)
+  );
+
+  const invalidUnitIds = uniqueUnitIds.filter(
+    (unitId) => !existingUnitIds.has(unitId)
+  );
+
+  if (invalidUnitIds.length > 0) {
+    throw createServiceError(
+      `Uma ou mais unidades não existem: ${invalidUnitIds.join(", ")}`,
+      400
+    );
+  }
+
+  const inactiveUnitIds = units
+    .filter((unit) => !unit.is_active)
+    .map((unit) => unit.id);
+
+  if (inactiveUnitIds.length > 0) {
+    throw createServiceError(
+      `Não é possível atribuir unidades inativas: ${inactiveUnitIds.join(", ")}`,
+      400
+    );
+  }
+
+  return uniqueUnitIds;
+}
+
 function serializeAuditMetadata(metadata) {
   if (metadata === undefined || metadata === null) {
     return null;
@@ -227,8 +279,11 @@ async function getUserById(userId) {
 
   const [userWithRoles] =
     await attachRolesToUsers([user]);
-
-  return userWithRoles;
+  
+    const [userWithRolesAndUnits] =
+    await attachUnitsToUsers([userWithRoles]);
+  
+    return userWithRolesAndUnits;
 }
 
 async function listUsers({
@@ -351,8 +406,11 @@ async function listUsers({
   const usersWithRoles =
     await attachRolesToUsers(users);
 
+  const usersWithRolesAndUnits =
+    await attachUnitsToUsers(usersWithRoles);
+
   return {
-    users: usersWithRoles,
+    users: usersWithRolesAndUnits,
 
     pagination: {
       page,
@@ -847,6 +905,173 @@ async function resetUserPassword(
   };
 }
 
+async function attachUnitsToUsers(users) {
+  if (users.length === 0) {
+    return [];
+  }
+
+  const userIds = users.map((user) => user.id);
+
+  const assignments = await prisma.user_units.findMany({
+    where: {
+      user_id: {
+        in: userIds,
+      },
+    },
+    select: {
+      user_id: true,
+      unit_id: true,
+      created_at: true,
+    },
+  });
+
+  if (assignments.length === 0) {
+    return users.map((user) => ({
+      ...user,
+      units: [],
+    }));
+  }
+
+  const unitIds = [
+    ...new Set(
+      assignments.map(
+        (assignment) => assignment.unit_id
+      )
+    ),
+  ];
+
+  const units = await prisma.units.findMany({
+    where: {
+      id: {
+        in: unitIds,
+      },
+    },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      type: true,
+      is_active: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  const unitMap = new Map(
+    units.map((unit) => [unit.id, unit])
+  );
+
+  const unitsByUser = new Map();
+
+  for (const assignment of assignments) {
+    const unit = unitMap.get(assignment.unit_id);
+
+    if (!unit) {
+      continue;
+    }
+
+    const currentUnits =
+      unitsByUser.get(assignment.user_id) || [];
+
+    currentUnits.push({
+      ...unit,
+      assigned_at: assignment.created_at,
+    });
+
+    unitsByUser.set(
+      assignment.user_id,
+      currentUnits
+    );
+  }
+
+  return users.map((user) => ({
+    ...user,
+    units: unitsByUser.get(user.id) || [],
+  }));
+}
+
+async function replaceUserUnits(
+  userId,
+  unitIds,
+  actorUserId
+) {
+  await findUserOrFail(
+    prisma,
+    userId
+  );
+
+  if (userId === actorUserId) {
+    throw createServiceError(
+      "Você não pode alterar suas próprias unidades.",
+      403
+    );
+  }
+
+  await assertActorCanManageUser(
+    prisma,
+    actorUserId,
+    userId
+  );
+
+  await prisma.$transaction(async (tx) => {
+    const validUnitIds =
+      await validateUnitIds(
+        tx,
+        unitIds
+      );
+
+    const previousAssignments =
+      await tx.user_units.findMany({
+        where: {
+          user_id: userId,
+        },
+        select: {
+          unit_id: true,
+        },
+      });
+
+    const previousUnitIds =
+      previousAssignments.map(
+        (assignment) => assignment.unit_id
+      );
+
+    await tx.user_units.deleteMany({
+      where: {
+        user_id: userId,
+      },
+    });
+
+    await tx.user_units.createMany({
+      data: validUnitIds.map((unitId) => ({
+        user_id: userId,
+        unit_id: unitId,
+      })),
+      skipDuplicates: true,
+    });
+
+    await tx.audit_logs.create({
+      data: {
+        actor_type: "ADMIN",
+        actor_user_id: actorUserId,
+        action: "USER_UNITS_REPLACED",
+        entity_type: "USER",
+        entity_id: userId,
+        success: true,
+        request_id: randomUUID(),
+
+        metadata_json:
+          serializeAuditMetadata({
+            previousUnitIds,
+            currentUnitIds: validUnitIds,
+          }),
+      },
+    });
+  });
+
+  return getUserById(userId);
+}
+
 module.exports = {
   getUserById,
   listUsers,
@@ -855,4 +1080,5 @@ module.exports = {
   replaceUserRoles,
   changeUserStatus,
   resetUserPassword,
+  replaceUserUnits,
 };

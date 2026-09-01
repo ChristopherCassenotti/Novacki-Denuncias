@@ -21,13 +21,11 @@ router.use(
     requireAdminAuth
 );
 
-router.use(
-    requireTrustedOrigin
-);
+//router.use(requireTrustedOrigin);
 
 router.use(
     requirePermissions(
-        "ROUTING_RULE_MANAGE"
+        "ROUTING_MANAGE"
     )
 );
 
