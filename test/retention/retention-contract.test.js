@@ -17,6 +17,12 @@ function loadExecutorService({ prisma, deleteObject, schedule }) {
   const schedulerPath = require.resolve(
     "../../src/modules/retentionScheduler/retentionScheduler.service"
   );
+  const executionsPath = require.resolve(
+    "../../src/modules/retentionExecutions/retentionExecutions.service"
+  );
+  const unitScopePath = require.resolve(
+    "../../src/modules/access/unitScope.service"
+  );
 
   delete require.cache[servicePath];
   require.cache[prismaPath] = {
@@ -37,6 +43,25 @@ function loadExecutorService({ prisma, deleteObject, schedule }) {
     loaded: true,
     exports: { scheduleRetentionForReport: schedule },
   };
+  require.cache[executionsPath] = {
+    id: executionsPath,
+    filename: executionsPath,
+    loaded: true,
+    exports: {
+      assertRetentionExecutionWithinActorScope: async () => true,
+    },
+  };
+  require.cache[unitScopePath] = {
+    id: unitScopePath,
+    filename: unitScopePath,
+    loaded: true,
+    exports: {
+      getActorUnitScope: async () => ({
+        isAdminMaster: true,
+        unitIds: [],
+      }),
+    },
+  };
 
   return require(servicePath);
 }
@@ -54,7 +79,9 @@ test("executa ANONYMIZE e preserva auditoria e estatística agregada", async () 
   const actorUserId = "223e4567-e89b-42d3-a456-426614174000";
   const executionId = "323e4567-e89b-42d3-a456-426614174000";
   const reportId = "423e4567-e89b-42d3-a456-426614174000";
+  const unitId = "623e4567-e89b-42d3-a456-426614174000";
   const auditEntries = [];
+  const auditLogUnitEntries = [];
   let findExecutionCalls = 0;
   let statisticsCalls = 0;
 
@@ -62,6 +89,7 @@ test("executa ANONYMIZE e preserva auditoria e estatística agregada", async () 
     id: executionId,
     report_id: reportId,
     action: "ANONYMIZE",
+    unit_id: unitId,
     status: "PENDING",
     scheduled_at: new Date(Date.now() - 60_000),
   };
@@ -82,11 +110,19 @@ test("executa ANONYMIZE e preserva auditoria e estatística agregada", async () 
       findMany: async () => [],
     },
     report_retention_executions: {
+      findUnique: async () => ({ unit_id: unitId }),
       updateMany: async () => ({ count: 1 }),
     },
     audit_logs: {
       create: async ({ data }) => {
         auditEntries.push(data);
+        return { id: `audit-${auditEntries.length}` };
+      },
+    },
+    audit_log_units: {
+      createMany: async ({ data }) => {
+        auditLogUnitEntries.push(...data);
+        return { count: data.length };
       },
     },
     $executeRaw: async () => {
@@ -134,6 +170,11 @@ test("executa ANONYMIZE e preserva auditoria e estatística agregada", async () 
   assert.deepEqual(JSON.parse(auditEntries[1].metadata_json), {
     action: "ANONYMIZE",
   });
+  assert.equal(auditLogUnitEntries.length, 2);
+  assert.deepEqual(
+    auditLogUnitEntries.map((entry) => entry.unit_id),
+    [unitId, unitId]
+  );
 });
 
 test("recupera execução RUNNING abandonada antes de buscar o lote", async () => {

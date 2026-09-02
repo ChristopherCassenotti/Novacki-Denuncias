@@ -46,7 +46,28 @@ async function resolveEntityUnitIds(
                 ]
                 : [];
         }
+case "RETENTION_EXECUTION": {
+    const execution =
+        await database
+            .report_retention_executions
+            .findUnique({
+                where: {
+                    id:
+                        entityId,
+                },
 
+                select: {
+                    unit_id:
+                        true,
+                },
+            });
+
+    return execution?.unit_id
+        ? [
+            execution.unit_id,
+        ]
+        : [];
+}
 
         case "USER": {
             const assignments =

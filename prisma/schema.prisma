@@ -283,6 +283,8 @@ model report_retention_executions {
   id                           String                             @id @db.Char(36)
   report_id                    String?                            @db.Char(36)
   policy_id                    String?                            @db.Char(36)
+  unit_id                      String?                            @db.Char(36)
+  report_protocol_snapshot     String?                            @db.VarChar(40)
   report_reference_hash        Bytes                              @db.Binary(32)
   action                       report_retention_executions_action
   status                       report_retention_executions_status @default(PENDING)
@@ -291,17 +293,20 @@ model report_retention_executions {
   completed_at                 DateTime?
   executed_by_user_id          String?                            @db.Char(36)
   error_message                String?                            @db.VarChar(1000)
+  attempt_count                Int                                @default(0) @db.UnsignedInt
   created_at                   DateTime                           @default(now())
   updated_at                   DateTime                           @default(now())
   retention_policies           retention_policies?                @relation(fields: [policy_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_policy")
   reports                      reports?                           @relation(fields: [report_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_report")
   users                        users?                             @relation(fields: [executed_by_user_id], references: [id], onUpdate: Restrict, map: "fk_retention_exec_user")
+  units                        units?                             @relation(fields: [unit_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_retention_execution_unit")
   retention_object_purge_queue retention_object_purge_queue[]
 
   @@index([executed_by_user_id], map: "fk_retention_exec_user")
   @@index([policy_id], map: "idx_retention_exec_policy")
   @@index([report_id], map: "idx_retention_exec_report")
   @@index([status, scheduled_at], map: "idx_retention_exec_status_date")
+  @@index([unit_id, status, scheduled_at], map: "idx_retention_exec_unit_status_date")
 }
 
 model reporter_sessions {
@@ -491,23 +496,24 @@ model teams {
 }
 
 model units {
-  id                     String                   @id @db.Char(36)
-  parent_id              String?                  @db.Char(36)
-  code                   String                   @unique(map: "uq_units_code") @db.VarChar(80)
-  name                   String                   @db.VarChar(150)
-  type                   units_type
-  is_active              Boolean                  @default(true)
-  created_at             DateTime                 @default(now())
-  updated_at             DateTime                 @default(now())
-  notification_email     String?                  @db.VarChar(255)
-  audit_log_units        audit_log_units[]
-  reports                reports[]
-  retention_policy_units retention_policy_units[]
-  routing_rules          routing_rules[]
-  team_units             team_units[]
-  units                  units?                   @relation("unitsTounits", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_units_parent")
-  other_units            units[]                  @relation("unitsTounits")
-  user_units             user_units[]
+  id                          String                        @id @db.Char(36)
+  parent_id                   String?                       @db.Char(36)
+  code                        String                        @unique(map: "uq_units_code") @db.VarChar(80)
+  name                        String                        @db.VarChar(150)
+  type                        units_type
+  is_active                   Boolean                       @default(true)
+  created_at                  DateTime                      @default(now())
+  updated_at                  DateTime                      @default(now())
+  notification_email          String?                       @db.VarChar(255)
+  audit_log_units             audit_log_units[]
+  report_retention_executions report_retention_executions[]
+  reports                     reports[]
+  retention_policy_units      retention_policy_units[]
+  routing_rules               routing_rules[]
+  team_units                  team_units[]
+  units                       units?                        @relation("unitsTounits", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_units_parent")
+  other_units                 units[]                       @relation("unitsTounits")
+  user_units                  user_units[]
 
   @@index([parent_id], map: "idx_units_parent")
   @@index([type, is_active], map: "idx_units_type_active")

@@ -1,7 +1,23 @@
 const {
     randomUUID,
 } = require("node:crypto");
+const {
+    getActorUnitScope,
+} = require(
+    "../access/unitScope.service"
+);
 
+const {
+    assertRetentionExecutionWithinActorScope,
+} = require(
+    "../retentionExecutions/retentionExecutions.service"
+);
+
+const {
+    createScopedAuditLog,
+} = require(
+    "../adminAuditLogs/auditScope.service"
+);
 const prisma =
     require("../../database/prisma");
 const { safeExceptionLog } = require("../../utils/safeLog");
@@ -211,8 +227,9 @@ async function setExecutionFailed(
                     },
                 });
 
-            await tx.audit_logs.create({
-                data: {
+            await createScopedAuditLog(
+                tx,
+                {
                     actor_type:
                         getActorType(
                             actorUserId
@@ -240,8 +257,8 @@ async function setExecutionFailed(
                         JSON.stringify({
                             errorCode,
                         }),
-                },
-            });
+                }
+            );
         }
     );
 }
@@ -308,8 +325,9 @@ async function cancelExecution(
                 });
             }
 
-            await tx.audit_logs.create({
-                data: {
+            await createScopedAuditLog(
+                tx,
+                {
                     actor_type:
                         getActorType(
                             actorUserId
@@ -337,8 +355,8 @@ async function cancelExecution(
                         JSON.stringify({
                             reason,
                         }),
-                },
-            });
+                }
+            );
         }
     );
 }
@@ -382,6 +400,11 @@ async function claimExecution(
 
                     error_message:
                         null,
+                    
+                    attempt_count: {
+                        increment:
+                            1,
+                    },
                 },
             });
 
@@ -390,19 +413,22 @@ async function claimExecution(
     );
 }
 
-async function recoverStaleExecutions() {
+async function recoverStaleExecutions(scopeWhere = {}) {
     const result =
         await prisma
             .report_retention_executions
             .updateMany({
                 where: {
+                    ...scopeWhere,
+
                     status:
                         "RUNNING",
 
                     report_id: {
-                        not: null,
+                        not:
+                            null,
                     },
-
+                
                     started_at: {
                         lte:
                             getStaleBefore(),
@@ -714,8 +740,9 @@ async function prepareReportRemoval(
                 );
             }
 
-            await tx.audit_logs.create({
-                data: {
+            await createScopedAuditLog(
+                tx,
+                {
                     actor_type:
                         getActorType(
                             actorUserId
@@ -753,8 +780,8 @@ async function prepareReportRemoval(
                                 action ===
                                 "ANONYMIZE",
                         }),
-                },
-            });
+                }
+            );
         }
     );
 }
@@ -1036,8 +1063,9 @@ async function finalizeRemovalExecution(
                     return false;
                 }
 
-                await tx.audit_logs.create({
-                    data: {
+                await createScopedAuditLog(
+                    tx,
+                    {
                     actor_type:
                         getActorType(
                             actorUserId
@@ -1065,8 +1093,8 @@ async function finalizeRemovalExecution(
                             JSON.stringify({
                                 action,
                             }),
-                    },
-                });
+                    }
+                );
 
                 return true;
             }
@@ -1117,6 +1145,12 @@ async function executeRetention(
     executionId,
     actorUserId = null
 ) {
+    if (actorUserId) {
+    await assertRetentionExecutionWithinActorScope(
+        actorUserId,
+        executionId
+    );
+}
     let execution =
         await prisma
             .report_retention_executions
@@ -1436,9 +1470,54 @@ async function runRetentionExecutorBatch({
                 100
             )
             : 20;
+    let scopeWhere = {};
 
+if (actorUserId) {
+    const scope =
+        await getActorUnitScope(
+            actorUserId
+        );
+
+    if (
+        !scope.isAdminMaster
+    ) {
+        if (
+            scope.unitIds.length ===
+            0
+        ) {
+            return {
+                processed:
+                    0,
+
+                completed:
+                    0,
+
+                skipped:
+                    0,
+
+                pendingR2:
+                    0,
+
+                failed:
+                    0,
+
+                recoveredExecutions:
+                    0,
+            };
+        }
+
+        scopeWhere = {
+            unit_id: {
+                in:
+                    scope.unitIds,
+            },
+        };
+    }
+}        
     const recoveredExecutions =
-        await recoverStaleExecutions();
+    await recoverStaleExecutions(
+        scopeWhere
+    );
 
     /*
      * Primeiro recuperamos remoções cujo
@@ -1450,6 +1529,8 @@ async function runRetentionExecutorBatch({
         .report_retention_executions
         .findMany({
             where: {
+                ...scopeWhere,
+                
                 status:
                     "RUNNING",
 
@@ -1522,6 +1603,8 @@ async function runRetentionExecutorBatch({
             .report_retention_executions
             .findMany({
                 where: {
+                    ...scopeWhere,
+                    
                     OR: [
                         {
                             status:

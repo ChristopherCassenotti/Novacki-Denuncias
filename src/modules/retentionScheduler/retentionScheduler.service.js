@@ -66,6 +66,9 @@ async function findReportOrFail(
 select: {
     id: true,
 
+    protocol:
+        true,
+
     unit_id:
         true,
 
@@ -405,23 +408,22 @@ async function scheduleRetentionForReport(
             });
 
     if (existing) {
-        return {
-            scheduled: true,
-            alreadyScheduled:
-                true,
-
-            executionId:
+        return await prisma
+    .report_retention_executions
+    .update({
+        where: {
+            id:
                 existing.id,
+        },
 
-            scheduledAt:
-                existing.scheduled_at,
+        data: {
+            unit_id:
+                report.unit_id,
 
-            action:
-                existing.action,
-
-            policyId:
-                policy.id,
-        };
+            report_protocol_snapshot:
+                report.protocol,
+        },
+    });
     }
 
     const executionId =
@@ -483,6 +485,15 @@ async function scheduleRetentionForReport(
 
                         policy_id:
                             policy.id,
+                            
+                        unit_id:
+                            report.unit_id,
+                                            
+                        report_protocol_snapshot:
+                            report.protocol,
+                                            
+                        attempt_count:
+                            0,
 
                         report_reference_hash:
                             referenceHash,

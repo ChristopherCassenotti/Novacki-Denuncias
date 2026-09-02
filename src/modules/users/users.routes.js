@@ -10,8 +10,8 @@ router.use(requireAdminAuth);
 router.use(requirePermissions('USER_MANAGE'));
 
 router.get('/', getUsers);
-router.get('/:id', getUser);
 router.get("/assignable-roles",getAssignableRoles);
+router.get('/:id', getUser);
 
 router.post('/', createUserHandler);
 router.post('/:id/reset-password', resetPasswordHandler);
